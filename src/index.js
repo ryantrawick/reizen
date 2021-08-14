@@ -112,8 +112,9 @@ function Board () {
     const cube = new THREE.Mesh(geometry, material)
     cube.position.set(x, y, z)
     const entity = new Entity(game.scene)
-    entity.addComponent(RotateComponent, 2.0)
+    entity.addComponent(RotateComponent, 2)
     entity.addComponent(MeshComponent, cube)
+    entity.addComponent(MoveComponent, 2)
     this.objects.push(entity)
   }
 }
@@ -138,14 +139,27 @@ function Entity (parent) {
   }
 }
 
-function RotateComponent (entity, speed) {
+function MoveComponent (entity, speed = 1) {
+  this.entity = entity
+  this.speed = speed
+  this.direction = new THREE.Vector2()
+
+  this.update = (delta) => {
+    this.direction.set((game.input.states.left.held ? -1 : 0) + (game.input.states.right.held ? 1 : 0), (game.input.states.forward.held ? -1 : 0) + (game.input.states.back.held ? 1 : 0))
+    this.direction.normalize()
+    entity.transform.position.z += this.speed * delta * this.direction.y
+    entity.transform.position.x += this.speed * delta * this.direction.x
+  }
+}
+
+function RotateComponent (entity, speed = 1) {
   this.entity = entity
   this.speed = speed
 
   this.update = (delta) => {
     entity.transform.rotation.x += this.speed * delta
-    entity.transform.rotation.y += this.speed / 2.0 * delta
-    entity.transform.rotation.z += this.speed * 1.5 * delta
+    entity.transform.rotation.y += this.speed / 2 * delta
+    entity.transform.rotation.z += this.speed * 1 * delta
   }
 }
 
@@ -156,17 +170,222 @@ function MeshComponent (entity, mesh) {
   this.update = (delta) => {}
 }
 
-/* function Input (game) {
-  this.install = () => {
-
+function Input () {
+  this.states = {}
+  this.actions = {
+    forward: { type: 'button' },
+    back: { type: 'button' },
+    left: { type: 'button' },
+    right: { type: 'button' },
+    select: { type: 'button' },
+    cancel: { type: 'button' }
   }
-} */
+
+  this.install = () => {
+    window.joypad.on('connect', e => {
+      const gamepad = e
+      const options = {
+        startDelay: 500,
+        duration: 1000,
+        weakMagnitude: 1,
+        strongMagnitude: 1
+      }
+      window.joypad.vibrate(gamepad, options)
+    })
+    window.addEventListener('keydown', this.onKeyDown)
+    window.addEventListener('keyup', this.onKeyUp)
+  }
+
+  this.keyboardStates = {}
+  this.keyboardActionMapping = {
+    forward: ['w', 'ArrowUp'],
+    back: ['s', 'ArrowDown'],
+    left: ['a', 'ArrowLeft'],
+    right: ['d', 'ArrowRight']
+  }
+  this.onKeyDown = (event) => {
+    if (!this.keyboardStates[event.key]) {
+      this.keyboardStates[event.key] = { down: false, held: false, up: false, checked: false }
+    }
+  }
+  this.onKeyUp = (event) => {
+    if (this.keyboardStates[event.key]) {
+      this.keyboardStates[event.key].up = true
+    }
+  }
+
+  this.gamepadStates = {}
+  this.gamepadActionMapping = {
+    forward: [12, { direction: 'negative', axis: 1 }, { direction: 'negative', axis: 3 }],
+    back: [13, { direction: 'positive', axis: 1 }, { direction: 'positive', axis: 3 }],
+    left: [14, { direction: 'negative', axis: 0 }, { direction: 'negative', axis: 2 }],
+    right: [15, { direction: 'positive', axis: 0 }, { direction: 'positive', axis: 2 }]
+  }
+  this.onButtonDown = (name) => {
+    if (!this.gamepadStates[name]) {
+      this.gamepadStates[name] = { down: false, held: false, up: false, checked: false }
+    }
+  }
+  this.onButtonUp = (name) => {
+    if (this.gamepadStates[name]) {
+      this.gamepadStates[name].up = true
+    }
+  }
+
+  this.update = () => {
+    // console.log(window.joypad.instances[Object.keys(window.joypad.instances)[0]].buttons[15])
+    Object.keys(this.gamepadStates).forEach(button => {
+      if (!this.gamepadStates[button].checked) {
+        this.gamepadStates[button].down = true
+        this.gamepadStates[button].held = true
+        this.gamepadStates[button].checked = true
+      } else {
+        this.gamepadStates[button].down = false
+      }
+
+      if (!this.gamepadStates[button].held) {
+        delete this.gamepadStates[button]
+        return
+      }
+
+      if (this.gamepadStates[button].up) {
+        this.gamepadStates[button].held = false
+      }
+    })
+
+    Object.keys(this.gamepadActionMapping).forEach(action => {
+      for (let i = 0; i < this.gamepadActionMapping[action].length; i++) {
+        const button = this.gamepadActionMapping[action][i]
+
+        if (typeof button === 'object') {
+          const axisValue = window.joypad.instances[Object.keys(window.joypad.instances)[0]].axes[button.axis]
+
+          if (button.direction === 'positive' && axisValue > 0.2) {
+            this.onButtonDown(button.axis)
+          } else if (button.direction === 'negative' && axisValue < -0.2) {
+            this.onButtonDown(button.axis)
+          } else {
+            this.onButtonUp(button.axis)
+          }
+        } else {
+          if (window.joypad.instances[Object.keys(window.joypad.instances)[0]].buttons[button].pressed) {
+            this.onButtonDown(button)
+          } else {
+            this.onButtonUp(button)
+          }
+        }
+      }
+
+      if (!this.actions[action]) {
+        console.error('InputState is missing the ' + action + ' action')
+      }
+
+      let pollDown = 0
+      let pollHeld = 0
+      let pollUp = 0
+
+      for (let i = 0; i < this.gamepadActionMapping[action].length; i++) {
+        let button = this.gamepadActionMapping[action][i]
+        if (typeof button === 'object') {
+          button = button.axis
+        }
+
+        if (!this.gamepadStates[button]) {
+          continue
+        }
+
+        pollDown += this.gamepadStates[button].down ? 1 : 0
+        pollHeld += this.gamepadStates[button].held ? 1 : 0
+        pollUp += this.gamepadStates[button].up ? 1 : 0
+      }
+
+      if (!this.states[action]) {
+        this.states[action] = { down: false, held: false, up: false }
+      }
+
+      this.states[action].down = pollDown > 0
+      this.states[action].held = pollHeld > 0
+      this.states[action].up = pollUp > 0
+    })
+
+    Object.keys(this.keyboardStates).forEach(key => {
+      if (!this.keyboardStates[key].checked) {
+        this.keyboardStates[key].down = true
+        this.keyboardStates[key].held = true
+        this.keyboardStates[key].checked = true
+      } else {
+        this.keyboardStates[key].down = false
+      }
+
+      if (!this.keyboardStates[key].held) {
+        delete this.keyboardStates[key]
+        return
+      }
+
+      if (this.keyboardStates[key].up) {
+        this.keyboardStates[key].held = false
+      }
+    })
+
+    Object.keys(this.keyboardActionMapping).forEach(action => {
+      if (!this.actions[action]) {
+        console.error('InputState is missing the ' + action + ' action')
+      }
+
+      let pollDown = 0
+      let pollHeld = 0
+      let pollUp = 0
+
+      for (let i = 0; i < this.keyboardActionMapping[action].length; i++) {
+        const key = this.keyboardActionMapping[action][i]
+
+        if (!this.keyboardStates[key]) {
+          continue
+        }
+
+        pollDown += this.keyboardStates[key].down ? 1 : 0
+        pollHeld += this.keyboardStates[key].held ? 1 : 0
+        pollUp += this.keyboardStates[key].up ? 1 : 0
+      }
+
+      if (!this.states[action]) {
+        this.states[action] = { down: false, held: false, up: false }
+      }
+
+      // this.states[action].down = pollDown > 0
+      // this.states[action].held = pollHeld > 0
+      // this.states[action].up = pollUp > 0
+    })
+  }
+
+  /* this.getAxis = (name) => {
+const value = 0.0
+let controllerValue = 0.0
+if (name === Controls.HORIZONTAL) {
+value =
+
+      let stickValue = 0.0
+      let padValue = 0.0
+      if (window.joypad.instances !== undefined && Object.keys(window.joypad.instances).length > 0) {
+        if (Math.abs(window.joypad.instances[Object.keys(window.joypad.instances)[0]].axes[3]) > 0.3) {
+          stickValue = window.joypad.instances[Object.keys(window.joypad.instances)[0]].axes[3]
+        }
+        padValue = window.joypad.instances[Object.keys(window.joypad.instances)[0]].button_13
+        controllerValue = Math.max(stickValue, padValue)
+      }
+    } else if (name === Controls.VERTICAL) {
+
+    }
+    return Math.max(value, controllerValue)
+  } */
+}
 
 function Game () {
   this.renderer = null
   this.ui = new UI()
   this.view = new View()
   this.board = new Board()
+  this.input = new Input()
   this.clock = new THREE.Clock()
   this.scene = new THREE.Scene()
   this.state = State.INSTALL
@@ -180,6 +399,7 @@ function Game () {
     this.ui.install()
     this.view.install()
     this.board.install()
+    this.input.install()
     this.fitViewport()
     window.addEventListener('resize', this.fitViewport, false)
     window.addEventListener('contextmenu', (event) => {
@@ -221,17 +441,15 @@ function Game () {
       charIndex++
     } */
 
-    // Move to input
-    /* if (window.joypad.instances !== undefined && Object.keys(window.joypad.instances).length > 0) {
-      if (Math.abs(window.joypad.instances[Object.keys(window.joypad.instances)[0]].axes[3]) > 0.3) {
-        cube.position.z += window.joypad.instances[Object.keys(window.joypad.instances)[0]].axes[3] * delta
-        console.log(window.joypad.instances[Object.keys(window.joypad.instances)[0]].axes[3])
-      }
-    } */
+    // Input
+    this.input.update()
+
+    // Update
     for (let i = 0; i < this.board.objects.length; i++) {
       this.board.objects[i].update(delta)
     }
 
+    // Render
     this.renderer.render(this.scene, this.view.camera)
     this.ui.render()
   }
