@@ -11,9 +11,19 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@pixi/constants": "^6.1.2",
+    "@pixi/core": "^6.1.2",
+    "@pixi/display": "^6.1.2",
+    "@pixi/loaders": "^6.1.2",
+    "@pixi/math": "^6.1.2",
+    "@pixi/runner": "^6.1.2",
+    "@pixi/settings": "^6.1.2",
+    "@pixi/sprite": "^6.1.2",
+    "@pixi/text-bitmap": "^6.1.2",
+    "@pixi/ticker": "^6.1.2",
+    "@pixi/utils": "^6.1.2",
     "joypad.js": "^2.2.5",
     "pathfinding": "^0.4.18",
-    "pixi.js": "^6.1.2",
     "three": "^0.131.3"
   },
   "devDependencies": {

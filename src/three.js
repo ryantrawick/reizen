@@ -56,7 +56,7 @@ export { Mesh } from 'three/src/objects/Mesh.js'
 // export class Line {}
 // export { Points } from 'three/src/objects/Points.js'
 // export class Points {}
-// export { Group } from 'three/src/objects/Group.js'
+export { Group } from 'three/src/objects/Group.js'
 // export { VideoTexture } from 'three/src/textures/VideoTexture.js'
 export { DataTexture } from 'three/src/textures/DataTexture.js'
 // export { DataTexture2DArray } from 'three/src/textures/DataTexture2DArray.js'
@@ -150,7 +150,7 @@ export { BufferGeometry } from 'three/src/core/BufferGeometry.js'
 // export { InstancedBufferAttribute } from 'three/src/core/InstancedBufferAttribute.js'
 export * from 'three/src/core/BufferAttribute.js'
 export { Object3D } from 'three/src/core/Object3D.js'
-export { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader'
+// export { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader'
 // export { Raycaster } from 'three/src/core/Raycaster.js'
 /* export class Raycaster {
   setFromCamera () {}
