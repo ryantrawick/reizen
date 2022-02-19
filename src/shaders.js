@@ -97,7 +97,7 @@ vec3 ditherCrunch(vec3 col, vec2 p) {
 }
 
 void main() {
-    vec4 diffuseColor = vec4(1.0);//texture2D(map, vUv);texture2D(psxDitherTable, vUv);//
+    vec4 diffuseColor = texture2D(map, vUv);//texture2D(psxDitherTable, vUv);//vec4(1.0);//
     diffuseColor.xyz = diffuseColor.xyz * vColor;
     diffuseColor.xyz = diffuseColor.xyz * tintColor;
     diffuseColor.xyz = ditherCrunch(diffuseColor.xyz, gl_FragCoord.xy);
