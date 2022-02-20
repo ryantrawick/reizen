@@ -27,7 +27,7 @@ window.joypad.on('connect', e => {
 }) */
 
 function View () {
-  this.camera = new THREE.PerspectiveCamera(70, 4 / 3, 0.01, 128)
+  this.camera = new THREE.PerspectiveCamera(70, 4 / 3, 0.01, 64)
 
   this.install = () => {
     this.camera.position.z = 4
@@ -75,6 +75,7 @@ function UI () {
     newText.position.y = y
     this.activeText.push(newText)
     this.stage.addChild(newText)
+    return newText
   }
 
   this.ensureResources = (callback) => {
@@ -89,9 +90,88 @@ function Board () {
 
   this.install = () => {}
 
-  this.start = () => {}
+  this.start = () => {
+    // const timeText = game.ui.addText(320 / 2 + 1, 240 / 2 + 1, '')
+    // const timerEntity = new Entity(game.scene)
+    // timerEntity.addComponent(TimerComponent, timeText)
+    // this.objects.push(timerEntity)
+    // this.addSphere(0, 0, 0, 0.5)
+    game.scene.add(new THREE.AxesHelper(2))
+    const fallGameEntity = new Entity(game.scene)
+    fallGameEntity.addComponent(FallGameComponent)
+    this.objects.push(fallGameEntity)
+    this.addSphere(0, 0, 0, 2)
+    // this.addSphere(0, 1, 0, 2)
+  }
 
-  this.addCube = (x = 0, y = 0, z = 0) => {
+  this.addSphere = (x = 0, y = 0, z = 0, radius = 1) => {
+    const geometry = new THREE.IcosahedronGeometry(radius, 1) // (1, 1, 1)
+    const vertices = geometry.getAttribute('position').array
+    const newVertices = []
+    let scale
+    for (let i = 0; i < vertices.length; i += 3) {
+      // const triangle = new THREE.Triangle(geometry.parameters.vertices[i], geometry.parameters.vertices[i + 1], geometry.parameters.vertices[i + 2])
+      // let baryCenter = new THREE.Vector3()
+      // triangle.getBarycoord(new THREE.Vector3(1/3, 1/3, 1/3), baryCenter)
+
+      if (i % 9 === 0) {
+        const random = Math.random()
+        console.log(random > 0.2)
+        if (random > 0.2) {
+        // Skip
+          i += 9
+        }
+
+        scale = (Math.random() * 3.0)
+      }
+
+      const currentVertex = new THREE.Vector3(vertices[i], vertices[i + 1], vertices[i + 2])
+      const direction = new THREE.Vector3(0, 0, 0).sub(currentVertex)
+      direction.normalize()
+      // currentVertex.add(direction.multiplyScalar(Math.random() * 2))
+
+      vertices[i] -= direction.x * scale
+      vertices[i + 1] -= direction.y * scale
+      vertices[i + 2] -= direction.z * scale
+      newVertices.push(vertices[i])
+      newVertices.push(vertices[i + 1])
+      newVertices.push(vertices[i + 2])
+      // geometry.parameters.vertices[i]
+    }
+    const finalVertices = new Float32Array(newVertices.length)
+    newVertices.forEach((element, index) => {
+      finalVertices[index] = element
+    })
+    geometry.setAttribute('position', new THREE.BufferAttribute(finalVertices, 3))
+    // const colorArray = new Float32Array(3 * (4 * 6))
+    // for (let i = 0; i < 3 * (4 * 6); i += 3) {
+    //   colorArray[i] = 0.0
+    //   colorArray[i + 1] = 1.0 * ((i / 3) / (4 * 6))
+    //   colorArray[i + 2] = 1.0// 0.6 * ((i / 3) / (4 * 6))
+    // }
+    // geometry.setAttribute('color', new THREE.BufferAttribute(colorArray, 3))
+
+    const material = new THREE.RawShaderMaterial({
+      uniforms: {
+        // map: { value: new THREE.TextureLoader().load('textures/sprites/circle.png') },
+        map: { value: new THREE.TextureLoader().load('assets/field.png') },
+        tintColor: { value: new THREE.Vector3(1.0, 1.0, 1.0) }
+      },
+      vertexShader: SHADER.PSXVert,
+      fragmentShader: SHADER.PSXFrag,
+      depthTest: true,
+      depthWrite: true
+    })
+    const sphere = new THREE.Mesh(geometry, material)
+    sphere.position.set(x, y, z)
+    const entity = new Entity(game.scene)
+    // entity.addComponent(RotateComponent, 0.2)
+    entity.addComponent(MeshComponent, sphere)
+    // entity.addComponent(MoveComponent, 2)
+    this.objects.push(entity)
+  }
+
+  /* this.addCube = (x = 0, y = 0, z = 0) => {
     const geometry = new THREE.BoxGeometry(1, 1, 1)
     const colorArray = new Float32Array(3 * (4 * 6))
     for (let i = 0; i < 3 * (4 * 6); i += 3) {
@@ -140,7 +220,7 @@ function Board () {
         game.board.objects.push(entity)
       })
     })
-  }
+  } */
 }
 
 Entity.ids = 0
@@ -193,11 +273,110 @@ function RotateComponent (entity, speed = 1) {
   }
 }
 
+function TimerComponent (entity, text) {
+  this.entity = entity
+  this.time = 0
+
+  this.update = (delta) => {
+    this.time += delta
+    text.text = this.time
+  }
+}
+
 function MeshComponent (entity, mesh) {
   this.entity = entity
   entity.transform.add(mesh)
 
   this.update = (delta) => {}
+}
+
+const clamp = (num, min, max) => Math.min(Math.max(num, min), max)
+
+function FallGameComponent (entity) {
+  this.entity = entity
+  // entity.transform.add(mesh)
+  this.rotation = new THREE.Quaternion()
+  this.rotationApplied = new THREE.Quaternion()
+  this.rotateSpeed = 180.0 // Degrees
+  this.distanceFromCenter = 30.0
+  this.maxDistanceFromCenter = 30.0
+  this.velocity = 0.0
+  this.timeToKill = 4.0
+  this.killTimer = 0.0
+  this.acceleration = -24.0
+  this.bounceVelocity = 24.0
+  this.terminalVelocityDown = -55.0
+  this.terminalVelocityUp = 55.0
+  this.cameraForward = new THREE.Vector3()
+  // this.axis = new THREE.AxesHelper(3)
+  // game.scene.add(this.axis)
+
+  this.update = (delta) => {
+    if (this.killTimer < this.timeToKill) {
+      this.killTimer += delta
+    }
+
+    this.velocity = clamp(this.velocity, this.terminalVelocityDown, this.terminalVelocityUp)
+    this.distanceFromCenter += this.velocity * delta + 0.5 * this.acceleration * delta * delta
+    if (this.distanceFromCenter < 0.0) {
+      this.distanceFromCenter = 0.0
+    }
+    this.velocity += this.acceleration * delta
+
+    this.rotation.multiply(new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(
+        ((((game.input.getButton('forward') ? -1.0 : 0.0) + (game.input.getButton('back') ? 1.0 : 0.0)) * this.rotateSpeed) * (Math.PI / 180.0)) * delta,
+        ((((game.input.getButton('left') ? -1.0 : 0.0) + (game.input.getButton('right') ? 1.0 : 0.0)) * this.rotateSpeed) * (Math.PI / 180.0)) * delta,
+        0
+      )))
+
+    /* const rotObjectMatrix = new THREE.Matrix4()
+    rotObjectMatrix.makeRotationFromQuaternion(
+      new THREE.Quaternion().setFromEuler(
+        new THREE.Euler(
+          ((game.input.getButton('forward') ? 1.0 : 0.0) + (game.input.getButton('back') ? -1.0 : 0.0)) * this.rotateSpeed * delta / 360.0,
+          ((game.input.getButton('left') ? 1.0 : 0.0) + (game.input.getButton('right') ? -1.0 : 0.0)) * this.rotateSpeed * delta / 360.0,
+          0.0
+        ))
+    )
+    this.rotationApplied.setFromRotationMatrix(rotObjectMatrix) */
+
+    // this.axis.rotation.setFromQuaternion(this.rotation)
+
+    game.view.camera.rotation.setFromQuaternion(this.rotation)
+    game.view.camera.getWorldDirection(this.cameraForward)
+    game.view.camera.position.set(0, 0, 0)
+    game.view.camera.translateZ(this.distanceFromCenter)
+    // game.view.camera.position.set(this.cameraForward * this.maxDistanceFromCenter)
+
+    // game.view.camera.position.set(new THREE.Vector3().lerpVectors(new THREE.Vector3(0, 0, 0), -this.cameraForward * this.maxDistanceFromCenter, this.distanceFromCenter / this.maxDistanceFromCenter))
+    // Camera.main.transform.rotation = rotation;
+    // Camera.main.transform.position = Vector3.LerpUnclamped(Vector3.zero, -Camera.main.transform.forward * maxDistanceFromCenter, distanceFromCenter / maxDistanceFromCenter);
+
+    /* if (Physics.Raycast(Camera.main.transform.position, Camera.main.transform.forward, out RaycastHit hit, 0.2f, LayerMask.GetMask("Bounce"))) {
+velocity = bounceVelocity;
+hit.collider.gameObject.SetActive(false);
+
+if (hit.collider.gameObject.GetComponent<MeshRenderer>().sharedMaterial == bounceCage.GetComponent<BounceCage>().goodMaterial) {
+timer += 0.5f;
+}
+else if (hit.collider.gameObject.GetComponent<MeshRenderer>().sharedMaterial == bounceCage.GetComponent<BounceCage>().hurtMaterial) {
+timer -= 1f;
+}
+} */
+
+    // We've arrived and the timer has finished
+    if (this.distanceFromCenter <= 0.0) {
+      this.velocity = this.bounceVelocity
+      if (this.killTimer >= this.timeToKill) {
+        console.log('Congratulations, you killed the ogre!')
+        // enabled = false;
+      } else {
+        console.error('Oh no, you died! Try again!')
+        // enabled = false;
+      }
+    }
+  }
 }
 
 function Game () {
@@ -214,7 +393,7 @@ function Game () {
     this.renderer = new THREE.WebGL1Renderer({ antialias: false, stencil: false, depth: true })
     this.renderer.setPixelRatio(1)
     this.renderer.setSize(320, 240, false)
-    this.renderer.setClearColor(new THREE.Color('cornflowerblue'))
+    this.renderer.setClearColor(new THREE.Color('white'))
     document.body.appendChild(this.renderer.domElement)
     this.ui.install()
     this.view.install()
@@ -231,9 +410,9 @@ function Game () {
       this.ui.start()
       this.view.start()
       this.board.start()
-      this.ui.addText(320 / 2 + 1, 240 / 2 + 1, 'Hello!', 0x000000)
-      this.ui.addText(320 / 2, 240 / 2, 'Hello!')
-      this.board.addLevel()
+      // this.ui.addText(320 / 2 + 1, 240 / 2 + 1, 'Hello!', 0x000000)
+      // this.ui.addText(320 / 2, 240 / 2, 'Hello!')
+      // this.board.addSphere(0.0, 0.0, 0.0, 0.5)
       this.renderer.setAnimationLoop(this.update)
     })
   }
