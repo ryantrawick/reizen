@@ -36,13 +36,19 @@ function View () {
   this.start = () => {}
 }
 
-let progressBarMask
+const roundMod = (num, multiple) => Math.round(num / multiple) * multiple
+const lerp = (v0, v1, t) => v0 * (1 - t) + v1 * t
 
 function UI () {
   this.renderer = null
   this.stage = null
   this.activeText = []
   this.loader = null
+  this.progressBarMask = null
+  this.progressBarLossMask = null
+  this.progressArrow = null
+  this.progressText = null
+  this.progressTextShadow = null
 
   // const charCounter = 0
   // const charIndex = 0
@@ -67,21 +73,64 @@ function UI () {
     const simpleShader = new PIXI.Filter('', SHADER.PSXFragUI)
     progressBar.filters = [simpleShader]
     this.stage.addChild(progressBar)
+
+    const progressBarLoss = new PIXI.Sprite(this.loader.resources.progress_bar_loss.texture)
+    progressBarLoss.position.x = 129 * 2
+    progressBarLoss.position.y = 8 * 2
+    progressBarLoss.height *= 2
+    progressBarLoss.width *= 2
+    progressBarLoss.filters = [simpleShader]
+    this.stage.addChild(progressBarLoss)
+
     const progressBarFull = new PIXI.Sprite(this.loader.resources.progress_bar_full.texture)
     progressBarFull.position.x = 129 * 2
     progressBarFull.position.y = 8 * 2
     progressBarFull.height *= 2
     progressBarFull.width *= 2
     progressBarFull.filters = [simpleShader]
-    progressBarMask = new PIXI.Graphics()
-    progressBarMask.beginFill(0xFFFFFF)
-    progressBarMask.drawRect(0, 0, 320, 240)
-    progressBarMask.endFill()
-    progressBarFull.mask = progressBarMask
     this.stage.addChild(progressBarFull)
+
+    this.progressBarMask = new PIXI.Graphics()
+    progressBarFull.mask = this.progressBarMask
+
+    this.progressBarLossMask = new PIXI.Graphics()
+    progressBarLoss.mask = this.progressBarLossMask
+
+    this.progressArrow = new PIXI.Sprite(this.loader.resources.progress_bar_arrow.texture)
+    // progressBarFull.position.x = 129 * 2
+    // progressBarFull.position.y = 8 * 2
+    this.progressArrow.height *= 2
+    this.progressArrow.width *= 2
+    this.progressArrow.anchor.x = 1.0
+    this.progressArrow.anchor.y = -(1 / 6) // 6 / 13
+    this.progressArrow.filters = [simpleShader]
+    this.stage.addChild(this.progressArrow)
+
+    this.progressTextShadow = this.addText(262 + 1, 4 + 1, '', 0x000000, 1, 1)
+    this.progressText = this.addText(262, 4, '', 0xffffff, 1, 1)
   }
 
   this.render = () => {
+    this.progressBarLossMask.clear()
+    this.progressBarLossMask.beginFill()
+    this.progressBarLossMask.drawRect(129 * 2, 8 * 2 + roundMod((107 * Math.abs(shieldPercentPrevious - 1)) * 2, 2), 29 * 2, 107 * 2)
+    this.progressBarLossMask.endFill()
+
+    this.progressBarMask.clear()
+    this.progressBarMask.beginFill()
+    this.progressBarMask.drawRect(129 * 2, 8 * 2 + roundMod((107 * Math.abs(shieldPercent - 1)) * 2, 2), 29 * 2, 107 * 2)
+    this.progressBarMask.endFill()
+
+    this.progressArrow.position.x = roundMod(lerp(143 * 2, 126 * 2, shieldPercent), 2) // * 2
+    this.progressArrow.position.y = roundMod(lerp(113 * 2, 7 * 2, shieldPercent), 2) // * 2
+
+    this.progressText.position.x = this.progressArrow.position.x
+    this.progressText.position.y = this.progressArrow.position.y
+    this.progressText.text = `${Math.round(shieldPercent * 100)}&`
+    this.progressTextShadow.position.x = this.progressArrow.position.x + 1
+    this.progressTextShadow.position.y = this.progressArrow.position.y + 1
+    this.progressTextShadow.text = `${Math.round(shieldPercent * 100)}&`
+
     this.renderer.render(this.stage)
   }
 
@@ -106,7 +155,8 @@ function UI () {
       .add('kakwa', 'assets/kakwa.fnt')
       .add('progress_bar_empty', 'assets/progress_bar_unlit.png')
       .add('progress_bar_full', 'assets/progress_bar_lit.png')
-      .add('progress_bar_arrow', 'assets/progress_bar_arrow.png')
+      .add('progress_bar_arrow', 'assets/progress_bar_arrow6.png')
+      .add('progress_bar_loss', 'assets/progress_bar_lost.png')
       .load(() => {
         callback()
       })
@@ -114,6 +164,11 @@ function UI () {
 }
 
 const triangleList = []
+const TriangleType = {
+  NORMAL: 'normal',
+  GOOD: 'good',
+  BAD: 'bad'
+}
 
 function Board () {
   this.objects = []
@@ -135,6 +190,25 @@ function Board () {
   }
 
   this.addSphere = (x = 0, y = 0, z = 0, radius = 1) => {
+    const material = new THREE.RawShaderMaterial({
+      uniforms: {
+        map: {
+          value:
+            new THREE.TextureLoader().load('assets/panelssmall.png', (texture) => {
+              texture.magFilter = THREE.NearestFilter
+              texture.minFilter = THREE.NearestFilter
+              return texture
+            })
+        },
+        tintColor: { value: new THREE.Vector3(1.0, 1.0, 1.0) }
+      },
+      vertexShader: SHADER.PSXVert,
+      fragmentShader: SHADER.PSXFrag,
+      depthTest: true,
+      depthWrite: true,
+      side: THREE.DoubleSide
+    })
+
     const geometry = new THREE.IcosahedronGeometry(radius, 1) // (1, 1, 1)
     const vertices = geometry.getAttribute('position').array
     const newVertices = []
@@ -181,11 +255,15 @@ function Board () {
       finalVertices[index] = element
 
       if (index % 9 === 0) {
-        triangleList.push(new THREE.Triangle(
-          new THREE.Vector3(newVertices[index], newVertices[index + 1], newVertices[index + 2]),
-          new THREE.Vector3(newVertices[index + 3], newVertices[index + 4], newVertices[index + 5]),
-          new THREE.Vector3(newVertices[index + 6], newVertices[index + 7], newVertices[index + 8])
-        ))
+        triangleList.push(
+          {
+            triangle: new THREE.Triangle(
+              new THREE.Vector3(newVertices[index], newVertices[index + 1], newVertices[index + 2]),
+              new THREE.Vector3(newVertices[index + 3], newVertices[index + 4], newVertices[index + 5]),
+              new THREE.Vector3(newVertices[index + 6], newVertices[index + 7], newVertices[index + 8])
+            ),
+            type: (Math.random() > 0.5 ? TriangleType.NORMAL : (Math.random() > 0.5 ? TriangleType.GOOD : TriangleType.BAD))
+          })
       }
     })
     for (let i = 0; i < finalUV.length; i += 6) {
@@ -198,8 +276,10 @@ function Board () {
       finalUV[i + 4] = 1.0 / 2 // X3
       finalUV[i + 5] = 1.0 / 2 + 0.5 // Y3
     }
+
     geometry.setAttribute('position', new THREE.BufferAttribute(finalVertices, 3))
     geometry.setAttribute('uv', new THREE.BufferAttribute(finalUV, 2))
+
     // const colorArray = new Float32Array(3 * (4 * 6))
     // for (let i = 0; i < 3 * (4 * 6); i += 3) {
     //   colorArray[i] = 0.0
@@ -212,25 +292,6 @@ function Board () {
     // texture.minFilter = THREE.NearestFilter
     // texture.magFilter = THREE.NearestFilter
 
-    const material = new THREE.RawShaderMaterial({
-      uniforms: {
-        // map: { value: new THREE.TextureLoader().load('textures/sprites/circle.png') },
-        map: {
-          value:
-            new THREE.TextureLoader().load('assets/panelssmall.png', (texture) => {
-              texture.magFilter = THREE.NearestFilter
-              texture.minFilter = THREE.NearestFilter
-              return texture
-            })
-        },
-        tintColor: { value: new THREE.Vector3(1.0, 1.0, 1.0) }
-      },
-      vertexShader: SHADER.PSXVert,
-      fragmentShader: SHADER.PSXFrag,
-      depthTest: true,
-      depthWrite: true,
-      side: THREE.DoubleSide
-    })
     const sphere = new THREE.Mesh(geometry, material)
     sphere.position.set(x, y, z)
     const entity = new Entity(game.scene)
@@ -360,93 +421,21 @@ function MeshComponent (entity, mesh) {
 }
 
 const clamp = (num, min, max) => Math.min(Math.max(num, min), max)
+const E1 = new THREE.Vector3() // I don't think these do anything in the context of js and memory, but I'm going to keep them anyways I think
+const E2 = new THREE.Vector3()
+const N = new THREE.Vector3()
 
-function IsIntersecting (p, r, t) {
-// A = A - P
-// B = B - P
-// C = C - P
-// rr = r * r
-// V = cross(B - A, C - A)
-// d = dot(A, V)
-// e = dot(V, V)
-// sep1 = d * d > rr * e
-// aa = dot(A, A)
-// ab = dot(A, B)
-// ac = dot(A, C)
-// bb = dot(B, B)
-// bc = dot(B, C)
-// cc = dot(C, C)
-// sep2 = (aa > rr) & (ab > aa) & (ac > aa)
-// sep3 = (bb > rr) & (ab > bb) & (bc > bb)
-// sep4 = (cc > rr) & (ac > cc) & (bc > cc)
-// AB = B - A
-// BC = C - B
-// CA = A - C
-// d1 = ab - aa
-// d2 = bc - bb
-// d3 = ac - cc
-// e1 = dot(AB, AB)
-// e2 = dot(BC, BC)
-// e3 = dot(CA, CA)
-// Q1 = A * e1 - d1 * AB
-// Q2 = B * e2 - d2 * BC
-// Q3 = C * e3 - d3 * CA
-// QC = C * e1 - Q1
-// QA = A * e2 - Q2
-// QB = B * e3 - Q3
-// sep5 = [dot(Q1, Q1) > rr * e1 * e1] & [dot(Q1, QC) > 0]
-// sep6 = [dot(Q2, Q2) > rr * e2 * e2] & [dot(Q2, QA) > 0]
-// sep7 = [dot(Q3, Q3) > rr * e3 * e3] & [dot(Q3, QB) > 0]
-// separated = sep1 | sep2 | sep3 | sep4 | sep5 | sep6 | sep7
-  const a = t.a.sub(p)
-  const b = t.b.sub(p)
-  const c = t.c.sub(p)
-  const rr = r * r
-  const v = b.clone().sub(a).cross(c.sub(a))
-  const d = a.dot(v)
-  const e = v.dot(v)
-  // let sep1a = d.multiply(d)
-  // let sep1b = e.multiply(rr)
-  // let sep1 = sep1a.x > sep1b.x && sep1a.y > sep1b.y && sep1a.z > sep1b.z
-  const sep1 = d * d > rr * e
-  const aa = a.dot(a)
-  const ab = a.dot(b)
-  const ac = a.dot(c)
-  const bb = b.dot(b)
-  const bc = b.dot(c)
-  const cc = c.dot(c)
-  const sep2 = (aa > rr) && (ab > aa) && (ac > aa)
-  const sep3 = (bb > rr) && (ab > bb) && (bc > bb)
-  const sep4 = (cc > rr) && (ac > cc) && (bc > cc)
-  const ab2 = b.sub(a)
-  const bc2 = c.sub(b)
-  const ca2 = a.sub(c)
-  const d1 = ab - aa
-  const d2 = bc - bb
-  const d3 = ac - cc
-  const e1 = ab2.dot(ab2)
-  const e2 = bc2.dot(bc2)
-  const e3 = ca2.dot(ca2)
-  const q1 = a.multiplyScalar(e1).sub(ab2.multiplyScalar(d1))
-  const q2 = b.multiplyScalar(e2).sub(bc2.multiplyScalar(d2))
-  const q3 = a.multiplyScalar(e3).sub(ca2.multiplyScalar(d3))
-  const qc = c.multiplyScalar(e1).sub(q1)
-  const qa = a.multiplyScalar(e2).sub(q2)
-  const qb = b.multiplyScalar(e3).sub(q3)
-  const sep5 = q1.dot(q1) > rr * e1 * e1 & q1.dot(qc) > 0
-  const sep6 = q2.dot(q2) > rr * e2 * e2 & q2.dot(qa) > 0
-  const sep7 = q3.dot(q3) > rr * e3 * e3 & q3.dot(qb) > 0
-  return sep1 && sep2 && sep3 && sep4 && sep5 && sep6 && sep7
-}
+const AO = new THREE.Vector3()
+const DAO = new THREE.Vector3()
 
 function IntersectTriangle (ROrigin, RDir, A, B, C, len) {
-  const E1 = new THREE.Vector3().subVectors(B, A)
-  const E2 = new THREE.Vector3().subVectors(C, A)
-  const N = new THREE.Vector3().crossVectors(E1, E2)
+  E1.subVectors(B, A)
+  E2.subVectors(C, A)
+  N.crossVectors(E1, E2)
   const det = -RDir.dot(N)
   const invdet = 1.0 / det
-  const AO = new THREE.Vector3().subVectors(ROrigin, A)
-  const DAO = new THREE.Vector3().crossVectors(AO, RDir)
+  AO.subVectors(ROrigin, A)
+  DAO.crossVectors(AO, RDir)
   const u = E2.dot(DAO) * invdet
   const v = -E1.dot(DAO) * invdet
   const t = AO.dot(N) * invdet
@@ -456,11 +445,15 @@ function IntersectTriangle (ROrigin, RDir, A, B, C, len) {
   return (det >= 0.000001 && t >= 0.0 && t <= len && u >= 0.0 && v >= 0.0 && (u + v) <= 1.0)
 }
 
+let shieldPercent = 0.0
+let shieldPercentPrevious = 0.0
+
 function FallGameComponent (entity) {
   this.entity = entity
   // entity.transform.add(mesh)
   this.rotation = new THREE.Quaternion()
-  this.rotationApplied = new THREE.Quaternion()
+  this.newRotation = new THREE.Quaternion()
+  this.newRotationEuler = new THREE.Euler()
   this.rotateSpeed = 90.0 // Degrees
   this.distanceFromCenter = 30.0
   this.maxDistanceFromCenter = 30.0
@@ -472,6 +465,8 @@ function FallGameComponent (entity) {
   this.terminalVelocityDown = -55.0
   this.terminalVelocityUp = 55.0
   this.lastPosition = new THREE.Vector3()
+  this.distanceVector = new THREE.Vector3()
+  this.directionVector = new THREE.Vector3()
   // this.cameraForward = new THREE.Vector3()
   // this.axis = new THREE.AxesHelper(3)
   // game.scene.add(this.axis)
@@ -480,6 +475,7 @@ function FallGameComponent (entity) {
     if (this.killTimer < this.timeToKill) {
       this.killTimer += delta
     }
+    shieldPercent = clamp(this.killTimer, 0.0, this.timeToKill) / this.timeToKill
 
     this.velocity = clamp(this.velocity, this.terminalVelocityDown, this.terminalVelocityUp)
     this.distanceFromCenter += this.velocity * delta + 0.5 * this.acceleration * delta * delta
@@ -489,8 +485,8 @@ function FallGameComponent (entity) {
     this.velocity += this.acceleration * delta
 
     // TODO: Normalize here
-    this.rotation.multiply(new THREE.Quaternion().setFromEuler(
-      new THREE.Euler(
+    this.rotation.multiply(this.newRotation.setFromEuler(
+      this.newRotationEuler.set(
         ((((game.input.getButton('forward') ? -1.0 : 0.0) + (game.input.getButton('back') ? 1.0 : 0.0)) * this.rotateSpeed) * (Math.PI / 180.0)) * delta,
         ((((game.input.getButton('left') ? -1.0 : 0.0) + (game.input.getButton('right') ? 1.0 : 0.0)) * this.rotateSpeed) * (Math.PI / 180.0)) * delta,
         0
@@ -519,8 +515,10 @@ function FallGameComponent (entity) {
     // Check collisions
     if (this.velocity < 0.0) {
       for (let i = 0; i < triangleList.length; i++) {
-        if (IntersectTriangle(this.lastPosition, new THREE.Vector3().subVectors(game.view.camera.position, this.lastPosition).normalize(), triangleList[i].a, triangleList[i].b, triangleList[i].c, new THREE.Vector3().subVectors(this.lastPosition, game.view.camera.position).length() * 2)) {
+        if (IntersectTriangle(this.lastPosition, this.directionVector.subVectors(game.view.camera.position, this.lastPosition).normalize(), triangleList[i].a, triangleList[i].b, triangleList[i].c, this.distanceVector.subVectors(this.lastPosition, game.view.camera.position).length() * 3)) {
           this.velocity = this.bounceVelocity
+          shieldPercentPrevious = clamp(this.killTimer, 0.0, this.timeToKill) / this.timeToKill
+          this.killTimer = clamp(this.killTimer - 1.0, 0.0, this.timeToKill)
           break
         }
       }
@@ -556,11 +554,11 @@ timer -= 1f;
       this.velocity = this.bounceVelocity
       if (this.killTimer >= this.timeToKill) {
         console.log('Congratulations, you killed the ogre!')
-        // enabled = false;
       } else {
         console.error('Oh no, you died! Try again!')
-        // enabled = false;
       }
+      this.killTimer = 0.0
+      shieldPercentPrevious = 0.0
     }
   }
 }
