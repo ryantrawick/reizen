@@ -36,6 +36,8 @@ function View () {
   this.start = () => {}
 }
 
+let progressBarMask
+
 function UI () {
   this.renderer = null
   this.stage = null
@@ -56,7 +58,28 @@ function UI () {
     this.loader = PIXI.Loader.shared
   }
 
-  this.start = () => {}
+  this.start = () => {
+    const progressBar = new PIXI.Sprite(this.loader.resources.progress_bar_empty.texture)
+    progressBar.position.x = 129 * 2
+    progressBar.position.y = 8 * 2
+    progressBar.height *= 2
+    progressBar.width *= 2
+    const simpleShader = new PIXI.Filter('', SHADER.PSXFragUI)
+    progressBar.filters = [simpleShader]
+    this.stage.addChild(progressBar)
+    const progressBarFull = new PIXI.Sprite(this.loader.resources.progress_bar_full.texture)
+    progressBarFull.position.x = 129 * 2
+    progressBarFull.position.y = 8 * 2
+    progressBarFull.height *= 2
+    progressBarFull.width *= 2
+    progressBarFull.filters = [simpleShader]
+    progressBarMask = new PIXI.Graphics()
+    progressBarMask.beginFill(0xFFFFFF)
+    progressBarMask.drawRect(0, 0, 320, 240)
+    progressBarMask.endFill()
+    progressBarFull.mask = progressBarMask
+    this.stage.addChild(progressBarFull)
+  }
 
   this.render = () => {
     this.renderer.render(this.stage)
@@ -79,11 +102,18 @@ function UI () {
   }
 
   this.ensureResources = (callback) => {
-    this.loader.add('kakwa', 'assets/kakwa.fnt').load(() => {
-      callback()
-    })
+    this.loader
+      .add('kakwa', 'assets/kakwa.fnt')
+      .add('progress_bar_empty', 'assets/progress_bar_unlit.png')
+      .add('progress_bar_full', 'assets/progress_bar_lit.png')
+      .add('progress_bar_arrow', 'assets/progress_bar_arrow.png')
+      .load(() => {
+        callback()
+      })
   }
 }
+
+const triangleList = []
 
 function Board () {
   this.objects = []
@@ -100,7 +130,7 @@ function Board () {
     const fallGameEntity = new Entity(game.scene)
     fallGameEntity.addComponent(FallGameComponent)
     this.objects.push(fallGameEntity)
-    this.addSphere(0, 0, 0, 2)
+    this.addSphere(0, 0, 0, 3)
     // this.addSphere(0, 1, 0, 2)
   }
 
@@ -116,13 +146,14 @@ function Board () {
 
       if (i % 9 === 0) {
         const random = Math.random()
-        console.log(random > 0.2)
+        // console.log(`${random}, ${random < 0.8}`)
         if (random > 0.2) {
         // Skip
-          i += 9
+          i += 6
+          continue
         }
 
-        scale = (Math.random() * 3.0)
+        scale = (Math.random() * 8.0) // 3.0 this is the big scale for random push out
       }
 
       const currentVertex = new THREE.Vector3(vertices[i], vertices[i + 1], vertices[i + 2])
@@ -133,16 +164,42 @@ function Board () {
       vertices[i] -= direction.x * scale
       vertices[i + 1] -= direction.y * scale
       vertices[i + 2] -= direction.z * scale
+
+      // if (isNaN(vertices[i])) {
+      // continue
+      // }
+
       newVertices.push(vertices[i])
       newVertices.push(vertices[i + 1])
       newVertices.push(vertices[i + 2])
+
       // geometry.parameters.vertices[i]
     }
     const finalVertices = new Float32Array(newVertices.length)
+    const finalUV = new Float32Array((newVertices.length / 3) * 2)
     newVertices.forEach((element, index) => {
       finalVertices[index] = element
+
+      if (index % 9 === 0) {
+        triangleList.push(new THREE.Triangle(
+          new THREE.Vector3(newVertices[index], newVertices[index + 1], newVertices[index + 2]),
+          new THREE.Vector3(newVertices[index + 3], newVertices[index + 4], newVertices[index + 5]),
+          new THREE.Vector3(newVertices[index + 6], newVertices[index + 7], newVertices[index + 8])
+        ))
+      }
     })
+    for (let i = 0; i < finalUV.length; i += 6) {
+      finalUV[i] = 0.5 / 2 // X1
+      finalUV[i + 1] = 0.0 + 0.5 // Y1
+
+      finalUV[i + 2] = 0.0 // X2
+      finalUV[i + 3] = 1.0 / 2 + 0.5 // Y2
+
+      finalUV[i + 4] = 1.0 / 2 // X3
+      finalUV[i + 5] = 1.0 / 2 + 0.5 // Y3
+    }
     geometry.setAttribute('position', new THREE.BufferAttribute(finalVertices, 3))
+    geometry.setAttribute('uv', new THREE.BufferAttribute(finalUV, 2))
     // const colorArray = new Float32Array(3 * (4 * 6))
     // for (let i = 0; i < 3 * (4 * 6); i += 3) {
     //   colorArray[i] = 0.0
@@ -151,16 +208,28 @@ function Board () {
     // }
     // geometry.setAttribute('color', new THREE.BufferAttribute(colorArray, 3))
 
+    // const texture = new THREE.TextureLoader().load('assets/panels.png');
+    // texture.minFilter = THREE.NearestFilter
+    // texture.magFilter = THREE.NearestFilter
+
     const material = new THREE.RawShaderMaterial({
       uniforms: {
         // map: { value: new THREE.TextureLoader().load('textures/sprites/circle.png') },
-        map: { value: new THREE.TextureLoader().load('assets/field.png') },
+        map: {
+          value:
+            new THREE.TextureLoader().load('assets/panelssmall.png', (texture) => {
+              texture.magFilter = THREE.NearestFilter
+              texture.minFilter = THREE.NearestFilter
+              return texture
+            })
+        },
         tintColor: { value: new THREE.Vector3(1.0, 1.0, 1.0) }
       },
       vertexShader: SHADER.PSXVert,
       fragmentShader: SHADER.PSXFrag,
       depthTest: true,
-      depthWrite: true
+      depthWrite: true,
+      side: THREE.DoubleSide
     })
     const sphere = new THREE.Mesh(geometry, material)
     sphere.position.set(x, y, z)
@@ -292,12 +361,107 @@ function MeshComponent (entity, mesh) {
 
 const clamp = (num, min, max) => Math.min(Math.max(num, min), max)
 
+function IsIntersecting (p, r, t) {
+// A = A - P
+// B = B - P
+// C = C - P
+// rr = r * r
+// V = cross(B - A, C - A)
+// d = dot(A, V)
+// e = dot(V, V)
+// sep1 = d * d > rr * e
+// aa = dot(A, A)
+// ab = dot(A, B)
+// ac = dot(A, C)
+// bb = dot(B, B)
+// bc = dot(B, C)
+// cc = dot(C, C)
+// sep2 = (aa > rr) & (ab > aa) & (ac > aa)
+// sep3 = (bb > rr) & (ab > bb) & (bc > bb)
+// sep4 = (cc > rr) & (ac > cc) & (bc > cc)
+// AB = B - A
+// BC = C - B
+// CA = A - C
+// d1 = ab - aa
+// d2 = bc - bb
+// d3 = ac - cc
+// e1 = dot(AB, AB)
+// e2 = dot(BC, BC)
+// e3 = dot(CA, CA)
+// Q1 = A * e1 - d1 * AB
+// Q2 = B * e2 - d2 * BC
+// Q3 = C * e3 - d3 * CA
+// QC = C * e1 - Q1
+// QA = A * e2 - Q2
+// QB = B * e3 - Q3
+// sep5 = [dot(Q1, Q1) > rr * e1 * e1] & [dot(Q1, QC) > 0]
+// sep6 = [dot(Q2, Q2) > rr * e2 * e2] & [dot(Q2, QA) > 0]
+// sep7 = [dot(Q3, Q3) > rr * e3 * e3] & [dot(Q3, QB) > 0]
+// separated = sep1 | sep2 | sep3 | sep4 | sep5 | sep6 | sep7
+  const a = t.a.sub(p)
+  const b = t.b.sub(p)
+  const c = t.c.sub(p)
+  const rr = r * r
+  const v = b.clone().sub(a).cross(c.sub(a))
+  const d = a.dot(v)
+  const e = v.dot(v)
+  // let sep1a = d.multiply(d)
+  // let sep1b = e.multiply(rr)
+  // let sep1 = sep1a.x > sep1b.x && sep1a.y > sep1b.y && sep1a.z > sep1b.z
+  const sep1 = d * d > rr * e
+  const aa = a.dot(a)
+  const ab = a.dot(b)
+  const ac = a.dot(c)
+  const bb = b.dot(b)
+  const bc = b.dot(c)
+  const cc = c.dot(c)
+  const sep2 = (aa > rr) && (ab > aa) && (ac > aa)
+  const sep3 = (bb > rr) && (ab > bb) && (bc > bb)
+  const sep4 = (cc > rr) && (ac > cc) && (bc > cc)
+  const ab2 = b.sub(a)
+  const bc2 = c.sub(b)
+  const ca2 = a.sub(c)
+  const d1 = ab - aa
+  const d2 = bc - bb
+  const d3 = ac - cc
+  const e1 = ab2.dot(ab2)
+  const e2 = bc2.dot(bc2)
+  const e3 = ca2.dot(ca2)
+  const q1 = a.multiplyScalar(e1).sub(ab2.multiplyScalar(d1))
+  const q2 = b.multiplyScalar(e2).sub(bc2.multiplyScalar(d2))
+  const q3 = a.multiplyScalar(e3).sub(ca2.multiplyScalar(d3))
+  const qc = c.multiplyScalar(e1).sub(q1)
+  const qa = a.multiplyScalar(e2).sub(q2)
+  const qb = b.multiplyScalar(e3).sub(q3)
+  const sep5 = q1.dot(q1) > rr * e1 * e1 & q1.dot(qc) > 0
+  const sep6 = q2.dot(q2) > rr * e2 * e2 & q2.dot(qa) > 0
+  const sep7 = q3.dot(q3) > rr * e3 * e3 & q3.dot(qb) > 0
+  return sep1 && sep2 && sep3 && sep4 && sep5 && sep6 && sep7
+}
+
+function IntersectTriangle (ROrigin, RDir, A, B, C, len) {
+  const E1 = new THREE.Vector3().subVectors(B, A)
+  const E2 = new THREE.Vector3().subVectors(C, A)
+  const N = new THREE.Vector3().crossVectors(E1, E2)
+  const det = -RDir.dot(N)
+  const invdet = 1.0 / det
+  const AO = new THREE.Vector3().subVectors(ROrigin, A)
+  const DAO = new THREE.Vector3().crossVectors(AO, RDir)
+  const u = E2.dot(DAO) * invdet
+  const v = -E1.dot(DAO) * invdet
+  const t = AO.dot(N) * invdet
+  if (det >= 0.000001 && t >= 0.0 && t <= len && u >= 0.0 && v >= 0.0 && (u + v) <= 1.0) {
+    console.log(`${t} ${len}`)
+  }
+  return (det >= 0.000001 && t >= 0.0 && t <= len && u >= 0.0 && v >= 0.0 && (u + v) <= 1.0)
+}
+
 function FallGameComponent (entity) {
   this.entity = entity
   // entity.transform.add(mesh)
   this.rotation = new THREE.Quaternion()
   this.rotationApplied = new THREE.Quaternion()
-  this.rotateSpeed = 180.0 // Degrees
+  this.rotateSpeed = 90.0 // Degrees
   this.distanceFromCenter = 30.0
   this.maxDistanceFromCenter = 30.0
   this.velocity = 0.0
@@ -307,7 +471,8 @@ function FallGameComponent (entity) {
   this.bounceVelocity = 24.0
   this.terminalVelocityDown = -55.0
   this.terminalVelocityUp = 55.0
-  this.cameraForward = new THREE.Vector3()
+  this.lastPosition = new THREE.Vector3()
+  // this.cameraForward = new THREE.Vector3()
   // this.axis = new THREE.AxesHelper(3)
   // game.scene.add(this.axis)
 
@@ -323,6 +488,7 @@ function FallGameComponent (entity) {
     }
     this.velocity += this.acceleration * delta
 
+    // TODO: Normalize here
     this.rotation.multiply(new THREE.Quaternion().setFromEuler(
       new THREE.Euler(
         ((((game.input.getButton('forward') ? -1.0 : 0.0) + (game.input.getButton('back') ? 1.0 : 0.0)) * this.rotateSpeed) * (Math.PI / 180.0)) * delta,
@@ -344,9 +510,29 @@ function FallGameComponent (entity) {
     // this.axis.rotation.setFromQuaternion(this.rotation)
 
     game.view.camera.rotation.setFromQuaternion(this.rotation)
-    game.view.camera.getWorldDirection(this.cameraForward)
+    // game.view.camera.getWorldDirection(this.cameraForward)
+    this.lastPosition.copy(game.view.camera.position)
     game.view.camera.position.set(0, 0, 0)
     game.view.camera.translateZ(this.distanceFromCenter)
+    // console.log(new THREE.Vector3().subVectors(this.lastPosition, game.view.camera.position).normalize())
+
+    // Check collisions
+    if (this.velocity < 0.0) {
+      for (let i = 0; i < triangleList.length; i++) {
+        if (IntersectTriangle(this.lastPosition, new THREE.Vector3().subVectors(game.view.camera.position, this.lastPosition).normalize(), triangleList[i].a, triangleList[i].b, triangleList[i].c, new THREE.Vector3().subVectors(this.lastPosition, game.view.camera.position).length() * 2)) {
+          this.velocity = this.bounceVelocity
+          break
+        }
+      }
+    }
+    /* if (this.velocity < 0) {
+      for (let i = 0; i < triangleList.length; i++) {
+        if (IsIntersecting(game.view.camera.position, 0.2, triangleList[i])) {
+          this.velocity = this.bounceVelocity
+          break
+        }
+      }
+    } */
     // game.view.camera.position.set(this.cameraForward * this.maxDistanceFromCenter)
 
     // game.view.camera.position.set(new THREE.Vector3().lerpVectors(new THREE.Vector3(0, 0, 0), -this.cameraForward * this.maxDistanceFromCenter, this.distanceFromCenter / this.maxDistanceFromCenter))
@@ -393,7 +579,7 @@ function Game () {
     this.renderer = new THREE.WebGL1Renderer({ antialias: false, stencil: false, depth: true })
     this.renderer.setPixelRatio(1)
     this.renderer.setSize(320, 240, false)
-    this.renderer.setClearColor(new THREE.Color('white'))
+    this.renderer.setClearColor(new THREE.Color('black'))
     document.body.appendChild(this.renderer.domElement)
     this.ui.install()
     this.view.install()

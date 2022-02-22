@@ -101,7 +101,102 @@ void main() {
     diffuseColor.xyz = diffuseColor.xyz * vColor;
     diffuseColor.xyz = diffuseColor.xyz * tintColor;
     diffuseColor.xyz = ditherCrunch(diffuseColor.xyz, gl_FragCoord.xy);
+    // diffuseColor.xyz = mix(diffuseColor.xyz, diffuseColor.xyz * vec3(0.2, 0.2, 0.2), gl_FrontFacing);
+    //diffuseColor.x = mix(float(diffuseColor.x), float(diffuseColor.x * 0.2), gl_FrontFacing);
+    //diffuseColor.y = mix(diffuseColor.y, diffuseColor.y * 0.2, gl_FrontFacing);
+    //diffuseColor.z = mix(diffuseColor.z, diffuseColor.z * 0.2, gl_FrontFacing);
+    if (!gl_FrontFacing) {
+        diffuseColor.xyz = diffuseColor.xyz * 0.2;
+    }
     gl_FragColor = diffuseColor;
 }`
 
-export { PSXVert, PSXFrag }
+const PSXFragUI = `precision lowp float;
+
+//uniform sampler2D map;
+//uniform vec3 tintColor;
+
+//varying vec2 vUv;
+//varying vec3 vColor;
+
+varying vec2 vTextureCoord;
+uniform sampler2D uSampler;
+
+const mat4 psxDitherTable = mat4(
+    0,    8,    2,    10,
+    12,    4,    14,    6, 
+    3,    11,    1,    9, 
+    15,    7,    13,    5
+);
+
+float getData(int x, int y) {
+    for (int i = 0; i < 16; i++) {
+        if (i == x) {
+            for (int j = 0; j < 16; j++) {
+                if (j == y) {
+                    return psxDitherTable[i][j];
+                }
+            }
+        }
+    }
+}
+
+const int BIT_COUNT = 8;
+
+int modi(int x, int y) {
+    return x - y * (x / y);
+}
+
+int and(int a, int b) {
+    int result = 0;
+    int n = 1;
+
+    for(int i = 0; i < BIT_COUNT; i++) {
+        if ((modi(a, 2) == 1) && (modi(b, 2) == 1)) {
+            result += n;
+        }
+
+        a = a / 2;
+        b = b / 2;
+        n = n * 2;
+
+        if(!(a > 0 && b > 0)) {
+            break;
+        }
+    }
+    return result;
+}
+
+vec3 ditherCrunch(vec3 col, vec2 p) {
+    col = col * vec3(255.0);
+
+    int x = int(mod(p.x, 4.0));
+    int y = int(mod(p.y, 4.0));
+    float dither = getData(x, y);
+    col = col + (dither / 2.0 - 4.0);
+
+    col.r = mix(float(and(int(floor(col.r)), 248)), 248.0, step(248.0, col.r));
+    col.g = mix(float(and(int(floor(col.g)), 248)), 248.0, step(248.0, col.g));
+    col.b = mix(float(and(int(floor(col.b)), 248)), 248.0, step(248.0, col.b));
+
+    col = col / vec3(255.0);
+
+    return col;
+}
+
+void main() {
+    vec4 diffuseColor = texture2D(uSampler, vTextureCoord); //texture2D(psxDitherTable, vUv);//vec4(1.0);//
+    // diffuseColor.xyz = diffuseColor.xyz * vColor;
+    // diffuseColor.xyz = diffuseColor.xyz * tintColor;
+    diffuseColor.xyz = ditherCrunch(diffuseColor.xyz, gl_FragCoord.xy);
+    // diffuseColor.xyz = mix(diffuseColor.xyz, diffuseColor.xyz * vec3(0.2, 0.2, 0.2), gl_FrontFacing);
+    //diffuseColor.x = mix(float(diffuseColor.x), float(diffuseColor.x * 0.2), gl_FrontFacing);
+    //diffuseColor.y = mix(diffuseColor.y, diffuseColor.y * 0.2, gl_FrontFacing);
+    //diffuseColor.z = mix(diffuseColor.z, diffuseColor.z * 0.2, gl_FrontFacing);
+    //if (!gl_FrontFacing) {
+        //diffuseColor.xyz = diffuseColor.xyz * 0.2;
+    //}
+    gl_FragColor = diffuseColor;
+}`
+
+export { PSXVert, PSXFrag, PSXFragUI }

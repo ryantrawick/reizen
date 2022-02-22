@@ -17,6 +17,7 @@ export * from '@pixi/core'
 export * from '@pixi/loaders'
 export * from '@pixi/sprite'
 export * from '@pixi/text-bitmap'
+export * from '@pixi/graphics'
 Renderer.registerPlugin('batch', BatchRenderer)
 Loader.registerPlugin(BitmapFontLoader)
 
