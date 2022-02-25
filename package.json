@@ -23,6 +23,7 @@
     "@pixi/text-bitmap": "^6.1.2",
     "@pixi/ticker": "^6.1.2",
     "@pixi/utils": "^6.1.2",
+    "gl-swept-sphere-triangle": "^1.3.0",
     "joypad.js": "^2.2.5",
     "pathfinding": "^0.4.18",
     "three": "^0.131.3"

@@ -4,6 +4,7 @@ import 'joypad.js'
 // import * as PF from 'pathfinding'
 import * as SHADER from './shaders'
 import { Input } from './input'
+// import { BufferGeometry } from 'three'
 // import { MathUtils } from 'three'
 // const createGeometry from 'three-bmfont-text')
 // const loadFont from 'load-bmfont')
@@ -68,8 +69,8 @@ function UI () {
     const progressBar = new PIXI.Sprite(this.loader.resources.progress_bar_empty.texture)
     progressBar.position.x = 129 * 2
     progressBar.position.y = 8 * 2
-    progressBar.height *= 2
-    progressBar.width *= 2
+    // progressBar.height *= 2
+    // progressBar.width *= 2
     const simpleShader = new PIXI.Filter('', SHADER.PSXFragUI)
     progressBar.filters = [simpleShader]
     this.stage.addChild(progressBar)
@@ -77,16 +78,16 @@ function UI () {
     const progressBarLoss = new PIXI.Sprite(this.loader.resources.progress_bar_loss.texture)
     progressBarLoss.position.x = 129 * 2
     progressBarLoss.position.y = 8 * 2
-    progressBarLoss.height *= 2
-    progressBarLoss.width *= 2
+    // progressBarLoss.height *= 2
+    // progressBarLoss.width *= 2
     progressBarLoss.filters = [simpleShader]
     this.stage.addChild(progressBarLoss)
 
     const progressBarFull = new PIXI.Sprite(this.loader.resources.progress_bar_full.texture)
     progressBarFull.position.x = 129 * 2
     progressBarFull.position.y = 8 * 2
-    progressBarFull.height *= 2
-    progressBarFull.width *= 2
+    // progressBarFull.height *= 2
+    // progressBarFull.width *= 2
     progressBarFull.filters = [simpleShader]
     this.stage.addChild(progressBarFull)
 
@@ -97,10 +98,8 @@ function UI () {
     progressBarLoss.mask = this.progressBarLossMask
 
     this.progressArrow = new PIXI.Sprite(this.loader.resources.progress_bar_arrow.texture)
-    // progressBarFull.position.x = 129 * 2
-    // progressBarFull.position.y = 8 * 2
-    this.progressArrow.height *= 2
-    this.progressArrow.width *= 2
+    // this.progressArrow.height *= 2
+    // this.progressArrow.width *= 2
     this.progressArrow.anchor.x = 1.0
     this.progressArrow.anchor.y = -(1 / 6) // 6 / 13
     this.progressArrow.filters = [simpleShader]
@@ -163,17 +162,44 @@ function UI () {
   }
 }
 
-const triangleList = []
+let triangleList = []
 const TriangleType = {
   NORMAL: 'normal',
   GOOD: 'good',
   BAD: 'bad'
 }
 
+// const pointList = []
+
 function Board () {
   this.objects = []
+  this.panelTexture = null
+  this.angelGeometry1 = null
+  this.magicGirlTexture = null
+  this.angelWingGeometry3 = null
+  this.panelMaterial = null
 
   this.install = () => {}
+
+  this.ensureResources = (callback) => {
+    new THREE.TextureLoader().load('assets/panelssmall.png', (texture) => {
+      texture.magFilter = THREE.NearestFilter
+      texture.minFilter = THREE.NearestFilter
+      this.panelTexture = texture
+      new THREE.PLYLoader().load('assets/angel_eye_1.ply', (object) => {
+        this.angelGeometry1 = object
+        new THREE.TextureLoader().load('assets/magical_girl_1.png', (texture2) => {
+          texture2.magFilter = THREE.NearestFilter
+          texture2.minFilter = THREE.NearestFilter
+          this.magicGirlTexture = texture2
+          new THREE.PLYLoader().load('assets/angel_wing_3.ply', (object2) => {
+            this.angelWingGeometry3 = object2
+            callback()
+          })
+        })
+      })
+    })
+  }
 
   this.start = () => {
     // const timeText = game.ui.addText(320 / 2 + 1, 240 / 2 + 1, '')
@@ -182,32 +208,47 @@ function Board () {
     // this.objects.push(timerEntity)
     // this.addSphere(0, 0, 0, 0.5)
     game.scene.add(new THREE.AxesHelper(2))
+
     const fallGameEntity = new Entity(game.scene)
     fallGameEntity.addComponent(FallGameComponent)
     this.objects.push(fallGameEntity)
-    this.addSphere(0, 0, 0, 3)
+
+    this.setupStage(0, 0, 0, 4)
+    this.addAngel()
+    this.addGirl()
+
+    const bulletParticleEntity = new Entity(game.scene)
+    bulletParticleEntity.addComponent(BulletParticleComponent)
+    this.objects.push(bulletParticleEntity)
+
     // this.addSphere(0, 1, 0, 2)
   }
 
-  this.addSphere = (x = 0, y = 0, z = 0, radius = 1) => {
-    const material = new THREE.RawShaderMaterial({
-      uniforms: {
-        map: {
-          value:
-            new THREE.TextureLoader().load('assets/panelssmall.png', (texture) => {
-              texture.magFilter = THREE.NearestFilter
-              texture.minFilter = THREE.NearestFilter
-              return texture
-            })
-        },
-        tintColor: { value: new THREE.Vector3(1.0, 1.0, 1.0) }
-      },
-      vertexShader: SHADER.PSXVert,
-      fragmentShader: SHADER.PSXFrag,
-      depthTest: true,
-      depthWrite: true,
-      side: THREE.DoubleSide
+  this.setupStage = (x = 0, y = 0, z = 0, radius = 1) => {
+    let count = 0
+    triangleList.forEach((element, index) => {
+      triangleList[index].mesh.geometry.dispose()
+      game.scene.remove(triangleList[index].mesh)
+      count++
     })
+    if (count > 0) {
+      game.renderer.renderLists.dispose()
+    }
+    triangleList = []
+
+    if (this.panelMaterial == null) {
+      this.panelMaterial = new THREE.RawShaderMaterial({
+        uniforms: {
+          map: { value: this.panelTexture },
+          tintColor: { value: new THREE.Vector3(1.0, 1.0, 1.0) }
+        },
+        vertexShader: SHADER.PSXVert,
+        fragmentShader: SHADER.PSXFrag,
+        depthTest: true,
+        depthWrite: true,
+        side: THREE.DoubleSide
+      })
+    }
 
     const geometry = new THREE.IcosahedronGeometry(radius, 1) // (1, 1, 1)
     const vertices = geometry.getAttribute('position').array
@@ -227,7 +268,7 @@ function Board () {
           continue
         }
 
-        scale = (Math.random() * 8.0) // 3.0 this is the big scale for random push out
+        scale = (Math.random() * 7.0) // 3.0 this is the big scale for random push out
       }
 
       const currentVertex = new THREE.Vector3(vertices[i], vertices[i + 1], vertices[i + 2])
@@ -249,12 +290,48 @@ function Board () {
 
       // geometry.parameters.vertices[i]
     }
-    const finalVertices = new Float32Array(newVertices.length)
-    const finalUV = new Float32Array((newVertices.length / 3) * 2)
+    // const finalVertices = new Float32Array(newVertices.length)
+    // const finalUV = new Float32Array((newVertices.length / 3) * 2)
     newVertices.forEach((element, index) => {
-      finalVertices[index] = element
+      // finalVertices[index] = element
 
       if (index % 9 === 0) {
+        const triangleType = (Math.random() > 0.5 ? TriangleType.NORMAL : (Math.random() > 0.5 ? TriangleType.GOOD : TriangleType.BAD))
+
+        const triangleGeometry = new THREE.BufferGeometry()
+
+        const triangleVertices = new Float32Array(9)
+
+        triangleVertices[0] = newVertices[index]
+        triangleVertices[1] = newVertices[index + 1]
+        triangleVertices[2] = newVertices[index + 2]
+
+        triangleVertices[3] = newVertices[index + 3]
+        triangleVertices[4] = newVertices[index + 4]
+        triangleVertices[5] = newVertices[index + 5]
+
+        triangleVertices[6] = newVertices[index + 6]
+        triangleVertices[7] = newVertices[index + 7]
+        triangleVertices[8] = newVertices[index + 8]
+
+        triangleGeometry.setAttribute('position', new THREE.BufferAttribute(triangleVertices, 3))
+
+        const triangleUV = new Float32Array(6)
+
+        triangleUV[0] = 0.5 / 2 + (triangleType === TriangleType.GOOD ? 0.5 : 0.0) // X1
+        triangleUV[1] = 0.0 + (triangleType === TriangleType.NORMAL || triangleType === TriangleType.GOOD ? 0.5 : 0.0) // Y1
+
+        triangleUV[2] = 0.0 + (triangleType === TriangleType.GOOD ? 0.5 : 0.0) // X2
+        triangleUV[3] = 1.0 / 2 + (triangleType === TriangleType.NORMAL || triangleType === TriangleType.GOOD ? 0.5 : 0.0) // Y2
+
+        triangleUV[4] = 1.0 / 2 + (triangleType === TriangleType.GOOD ? 0.5 : 0.0) // X3
+        triangleUV[5] = 1.0 / 2 + (triangleType === TriangleType.NORMAL || triangleType === TriangleType.GOOD ? 0.5 : 0.0) // Y3
+
+        triangleGeometry.setAttribute('uv', new THREE.BufferAttribute(triangleUV, 2))
+
+        const newMesh = new THREE.Mesh(triangleGeometry, this.panelMaterial)
+        game.scene.add(newMesh)
+
         triangleList.push(
           {
             triangle: new THREE.Triangle(
@@ -262,11 +339,16 @@ function Board () {
               new THREE.Vector3(newVertices[index + 3], newVertices[index + 4], newVertices[index + 5]),
               new THREE.Vector3(newVertices[index + 6], newVertices[index + 7], newVertices[index + 8])
             ),
-            type: (Math.random() > 0.5 ? TriangleType.NORMAL : (Math.random() > 0.5 ? TriangleType.GOOD : TriangleType.BAD))
+            mesh: newMesh,
+            type: triangleType,
+            rotateAxis: (triangleType === TriangleType.GOOD ? new THREE.Vector3(1, 0, 0) : (triangleType === TriangleType.NORMAL ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1))),
+            rotateSpeed: Math.random()
           })
       }
     })
-    for (let i = 0; i < finalUV.length; i += 6) {
+
+    geometry.dispose()
+    /* for (let i = 0; i < finalUV.length; i += 6) {
       finalUV[i] = 0.5 / 2 // X1
       finalUV[i + 1] = 0.0 + 0.5 // Y1
 
@@ -275,10 +357,10 @@ function Board () {
 
       finalUV[i + 4] = 1.0 / 2 // X3
       finalUV[i + 5] = 1.0 / 2 + 0.5 // Y3
-    }
+    } */
 
-    geometry.setAttribute('position', new THREE.BufferAttribute(finalVertices, 3))
-    geometry.setAttribute('uv', new THREE.BufferAttribute(finalUV, 2))
+    // geometry.setAttribute('position', new THREE.BufferAttribute(finalVertices, 3))
+    // geometry.setAttribute('uv', new THREE.BufferAttribute(finalUV, 2))
 
     // const colorArray = new Float32Array(3 * (4 * 6))
     // for (let i = 0; i < 3 * (4 * 6); i += 3) {
@@ -292,13 +374,66 @@ function Board () {
     // texture.minFilter = THREE.NearestFilter
     // texture.magFilter = THREE.NearestFilter
 
-    const sphere = new THREE.Mesh(geometry, material)
+    /* const sphere = new THREE.Mesh(geometry, material)
     sphere.position.set(x, y, z)
     const entity = new Entity(game.scene)
-    // entity.addComponent(RotateComponent, 0.2)
     entity.addComponent(MeshComponent, sphere)
-    // entity.addComponent(MoveComponent, 2)
-    this.objects.push(entity)
+    this.objects.push(entity) */
+  }
+
+  this.addAngel = () => {
+    const entity = new Entity(game.scene)
+
+    const vertexMaterial = new THREE.RawShaderMaterial({
+      uniforms: {
+        tintColor: { value: new THREE.Vector3(1.0, 1.0, 1.0) }
+      },
+      vertexShader: SHADER.PSXVert,
+      fragmentShader: SHADER.PSXFragNoTexture,
+      depthTest: true,
+      depthWrite: true,
+      blending: THREE.AdditiveBlending
+    })
+
+    const eyeMesh = new THREE.Mesh(this.angelGeometry1, vertexMaterial)
+    eyeMesh.scale.multiplyScalar(3)
+    entity.addComponent(MeshComponent, eyeMesh)
+
+    const wing1 = new THREE.Mesh(this.angelWingGeometry3, vertexMaterial)
+    wing1.scale.multiplyScalar(3)
+    wing1.rotateY(180 * (Math.PI / 180))
+    wing1.rotateZ(-30 * (Math.PI / 180))
+    entity.addComponent(MeshComponent, wing1)
+
+    const wing2 = new THREE.Mesh(this.angelWingGeometry3, vertexMaterial)
+    wing2.scale.multiplyScalar(3)
+    wing2.rotateZ(-30 * (Math.PI / 180))
+    entity.addComponent(MeshComponent, wing2)
+
+    entity.addComponent(LookAtCameraComponent, 180)
+    entity.addComponent(NewRoundSquishComponent, 0.6, 1.6)
+
+    game.board.objects.push(entity)
+  }
+
+  this.addGirl = () => {
+    const entity = new Entity(game.scene)
+    const girlMaterial = new THREE.RawShaderMaterial({
+      uniforms: {
+        map: { value: this.magicGirlTexture },
+        tintColor: { value: new THREE.Vector3(1.0, 1.0, 1.0) }
+      },
+      vertexShader: SHADER.PSXVert,
+      fragmentShader: SHADER.PSXFrag,
+      depthTest: false,
+      depthWrite: false,
+      transparent: true
+    })
+    const girlGeometry = new THREE.PlaneGeometry(1, 1, 1, 1)
+    const girlMesh = new THREE.Mesh(girlGeometry, girlMaterial)
+    entity.addComponent(MeshComponent, girlMesh)
+    entity.addComponent(MagicGirlComponent)
+    game.board.objects.push(entity)
   }
 
   /* this.addCube = (x = 0, y = 0, z = 0) => {
@@ -371,6 +506,13 @@ function Entity (parent) {
       component.update(delta)
     }
   }
+  this.sendMessage = (name) => {
+    for (const component of this.components) {
+      if (typeof component[name] === 'function') {
+        component[name]()
+      }
+    }
+  }
 }
 
 function MoveComponent (entity, speed = 1) {
@@ -389,6 +531,25 @@ function MoveComponent (entity, speed = 1) {
     } else if (game.input.getButtonDown('cancel')) {
       entity.transform.position.y -= 1
     }
+  }
+}
+
+function MagicGirlComponent (entity) {
+  this.entity = entity
+  // this.targetPosition = new THREE.Vector3()
+
+  this.update = (delta) => {
+	 // this.targetPosition.copy(game.view.camera.position)
+    this.entity.transform.position.copy(game.view.camera.position)
+    this.entity.transform.rotation.copy(game.view.camera.rotation)
+    // this.entity.transform.translateZ(lerp(-2.4, -1.3, easeOutBack((globalVelocity + 5) / 24), 6)) // -1.2)
+    // this.entity.transform.translateZ(-1.2 * 2)
+    this.entity.transform.translateZ(lerp(-2, 0, globalVelocity / 55))// (globalVelocity >= 0 ? lerp(-1.4, -5, globalVelocity / 55) : lerp(-1.4, -3, Math.abs(globalVelocity) / 55)) // lerp(-2, 0, globalVelocity / 55)
+    this.entity.transform.translateX(((game.input.getButton('left') ? -1 : 0) + (game.input.getButton('right') ? 1 : 0)) * 0.1)
+    this.entity.transform.translateY(((game.input.getButton('forward') ? -1 : 0) + (game.input.getButton('back') ? 1 : 0)) * 0.1 * -1)
+    // this.entity.transform.lookAt(game.view.camera.position)
+    // game.view.camera.fov = lerp(70, 40, globalVelocity / 55)
+    game.view.camera.updateProjectionMatrix()
   }
 }
 
@@ -420,6 +581,201 @@ function MeshComponent (entity, mesh) {
   this.update = (delta) => {}
 }
 
+function NewRoundSquishComponent (entity, scale = 0.7, time = 1) {
+  this.entity = entity
+  this.countUpTime = 1
+
+  this.update = (delta) => {
+    if (this.countUpTime > 1) {
+      return
+    }
+
+    this.countUpTime += delta * time
+
+    this.entity.transform.scale.y = lerp(scale, 1, easeOutBack(this.countUpTime, 3))
+    this.entity.transform.scale.x = lerp(scale * 1.8, 1, easeOutBack(this.countUpTime, 3))
+  }
+
+  this.newRound = () => {
+    this.countUpTime = 0
+  }
+}
+
+function LookAtCameraComponent (entity, speed) {
+  this.entity = entity
+  // this.lastPosition = new THREE.Vector3().copy(game.view.camera.position)
+  // this.target = new THREE.Vector3().copy(game.view.camera.position)
+  // this.easedRotation = new THREE.Quaternion().copy(globalRotation)
+
+  this.update = (delta) => {
+    // this.target.x += (this.lastPosition.x - this.target.x) * speed * delta
+    // this.target.y += (this.lastPosition.y - this.target.y) * speed * delta
+    // this.target.z += (this.lastPosition.z - this.target.z) * speed * delta
+    // this.easedRotation.rotateTowards(globalRotation, speed * (Math.PI * 180) * delta)
+
+    this.entity.transform.quaternion.rotateTowards(globalRotation, (speed * (Math.PI / 180)) * delta)
+    // this.entity.transform.lookAt(this.target)
+
+    // this.lastPosition.copy(game.view.camera.position)
+  }
+}
+
+function BulletParticleComponent (entity) {
+  this.entity = entity
+  this.lifetime = 0
+  this.maxLifetime = 3
+  this.particleRadius = 0.2
+  this.particleCount = 25
+  // this.particleGlobalScale = 16
+  this.emitRate = 0 // 0.5
+  this.rootOfCount = Math.sqrt(this.particleCount)
+
+  //   for (let i = 0; i < this.particleCount; i++) {
+  //     pointList.push({
+  //       position: new THREE.Vector3(),
+  //       radius: this.particleRadius
+  //     })
+  //   }
+
+  const particleMaterial = new THREE.RawShaderMaterial({
+    uniforms: {
+      color: { value: new THREE.Vector3(1.0, 1.0, 1.0) }//,
+      // scale: { value: this.particleGlobalScale }
+    },
+    vertexShader: SHADER.BulletParticleVert,
+    fragmentShader: SHADER.BulletParticleFrag,
+    depthTest: true,
+    depthWrite: true,
+    blending: THREE.AdditiveBlending
+  })
+
+  const positions = new Float32Array(this.particleCount * 3)
+  const particleGeometry = new THREE.BufferGeometry()
+  particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+
+  this.particles = new THREE.Points(particleGeometry, particleMaterial)
+
+  entity.transform.add(this.particles)
+
+  // If type is sphere here, do this:
+  let row = 0
+  for (let i = 0; i < positions.length; i += 3) {
+    const offset = i / 3
+    const cell = offset % (this.rootOfCount)
+    if (cell === 0) {
+      row += 1
+    }
+
+    positions[i] = cell - ((this.rootOfCount - 1) / 2)
+    positions[i + 1] = row - ((this.rootOfCount + 1) / 2)
+    positions[i + 2] = 2.8// 2.8
+
+    const vector = new THREE.Vector3(positions[i], positions[i + 1], positions[i + 2]).divideScalar(Math.sqrt(positions[i] * positions[i] + positions[i + 1] * positions[i + 1] + positions[i + 2] * positions[i + 2])).multiplyScalar(8)
+    positions[i] = vector.x
+    positions[i + 1] = vector.y
+    positions[i + 2] = vector.z
+  }
+
+  this.update = (delta) => {
+    this.lifetime += delta
+
+    const positions = this.particles.geometry.attributes.position.array
+    const percentFinished = this.maxLifetime / this.lifetime
+
+    let row = 0
+    for (let i = 0; i < positions.length; i += 3) {
+      const offset = i / 3
+	  const cell = offset % (this.rootOfCount)
+      if (cell === 0) {
+        row += 1
+      }
+
+	  positions[i] = cell - ((this.rootOfCount - 1) / 2)
+	  positions[i + 1] = row - ((this.rootOfCount + 1) / 2)
+	  positions[i + 2] = 2.8// 2.8
+
+      //   const x2 = positions[i] * positions[i]
+      //   const y2 = positions[i + 1] * positions[i + 1]
+      //   const z2 = positions[i + 2] * positions[i + 2]
+      //   const x = positions[i] * Math.sqrt(1 - (y2 + z2) / 2 + (y2 * z2) / 3)
+      //   const y = positions[i + 1] * Math.sqrt(1 - (z2 + x2) / 2 + (z2 * x2) / 3)
+      //   const z = positions[i + 2] * Math.sqrt(1 - (x2 + y2) / 2 + (x2 * y2) / 3)
+
+      //   positions[i] = x
+      //   positions[i + 1] = y
+      //   positions[i + 2] = z
+	  const vector = new THREE.Vector3(positions[i], positions[i + 1], positions[i + 2]).divideScalar(Math.sqrt(positions[i] * positions[i] + positions[i + 1] * positions[i + 1] + positions[i + 2] * positions[i + 2])).multiplyScalar(8)
+      positions[i] = vector.x
+	  positions[i + 1] = vector.y
+	  positions[i + 2] = vector.z
+      // const row = offset % ((positions.length / 3) / 2)
+      /* if (this.lifetime > (this.emitRate * offset)) {
+positions[i] += delta * 6
+} */
+      // positions[i] += delta * offset// lerp(0, 8, clamp(percentFinished + offset, 0, 1)) // Math.sin((angle + percentFinished) * (Math.PI / 180)) * this.particleGlobalScale
+      // positions[i + 1] = //Math.sin((angle + percentFinished) * (Math.PI / 180)) * this.particleGlobalScale
+      // positions[i + 2] = //Math.sin((angle + percentFinished) * (Math.PI / 180)) * this.particleGlobalScale
+    }
+
+    if (this.lifetime > this.maxLifetime) {
+      this.lifetime = 0
+      // Reset points
+      for (let i = 0; i < positions.length; i += 3) {
+        positions[i] = 0
+      }
+    }
+
+    this.particles.geometry.attributes.position.needsUpdate = true
+
+    // Sort by depth
+    const vector = new THREE.Vector3()
+
+    const matrix = new THREE.Matrix4()
+    matrix.multiplyMatrices(game.view.camera.projectionMatrix, game.view.camera.matrixWorldInverse)
+    matrix.multiply(this.particles.matrixWorld)
+
+    const geometry = this.particles.geometry
+
+    let index = geometry.getIndex()
+
+    if (index === null) {
+      const array = new Uint16Array(positions.length / 3)
+      for (let i = 0; i < array.length; i++) {
+        array[i] = i
+      }
+
+      index = new THREE.BufferAttribute(array, 1)
+      geometry.setIndex(index)
+    }
+
+    const sortArray = []
+
+    for (let i = 0; i < index.array.length; i++) {
+      vector.fromArray(positions, i * 3)
+      vector.applyMatrix4(matrix)
+
+      sortArray.push([vector.z, i])
+    }
+
+    function numericalSort (a, b) {
+      return b[0] - a[0]
+    }
+
+    sortArray.sort(numericalSort)
+
+    const indices = index.array
+
+    for (let i = 0; i < index.array.length; i++) {
+      indices[i] = sortArray[i][1]
+    }
+
+    this.particles.geometry.index.needsUpdate = true
+    /* entity.transform.rotation.x += this.speed * delta
+    entity.transform.rotation.y += this.speed / 2 * delta
+    entity.transform.rotation.z += this.speed * 1 * delta */
+  }
+}
+
 const clamp = (num, min, max) => Math.min(Math.max(num, min), max)
 const E1 = new THREE.Vector3() // I don't think these do anything in the context of js and memory, but I'm going to keep them anyways I think
 const E2 = new THREE.Vector3()
@@ -448,17 +804,22 @@ function IntersectTriangle (ROrigin, RDir, A, B, C, len) {
 let shieldPercent = 0.0
 let shieldPercentPrevious = 0.0
 
+const easeOutBack = (t, s = 1) => 1 + (2.70158 * s) * Math.pow(clamp(t, 0, 1) - 1, 3) + (1.70158 * s) * Math.pow(clamp(t, 0, 1) - 1, 2)
+const easeOutBackNoClamp = (t, s = 1) => 1 + (2.70158 * s) * Math.pow(t - 1, 3) + (1.70158 * s) * Math.pow(t - 1, 2)
+const globalRotation = new THREE.Quaternion()
+let globalVelocity = 0
+
 function FallGameComponent (entity) {
   this.entity = entity
   // entity.transform.add(mesh)
   this.rotation = new THREE.Quaternion()
   this.newRotation = new THREE.Quaternion()
   this.newRotationEuler = new THREE.Euler()
-  this.rotateSpeed = 90.0 // Degrees
+  this.rotateSpeed = 90.0 + 45.0 // Degrees
   this.distanceFromCenter = 30.0
   this.maxDistanceFromCenter = 30.0
   this.velocity = 0.0
-  this.timeToKill = 4.0
+  this.timeToKill = 8.0
   this.killTimer = 0.0
   this.acceleration = -24.0
   this.bounceVelocity = 24.0
@@ -467,6 +828,8 @@ function FallGameComponent (entity) {
   this.lastPosition = new THREE.Vector3()
   this.distanceVector = new THREE.Vector3()
   this.directionVector = new THREE.Vector3()
+  this.stageScale = 0.0
+  this.finishedScaling = false
   // this.cameraForward = new THREE.Vector3()
   // this.axis = new THREE.AxesHelper(3)
   // game.scene.add(this.axis)
@@ -483,6 +846,9 @@ function FallGameComponent (entity) {
       this.distanceFromCenter = 0.0
     }
     this.velocity += this.acceleration * delta
+    globalVelocity = this.velocity
+
+    this.stageScale += delta * 2
 
     // TODO: Normalize here
     this.rotation.multiply(this.newRotation.setFromEuler(
@@ -491,6 +857,8 @@ function FallGameComponent (entity) {
         ((((game.input.getButton('left') ? -1.0 : 0.0) + (game.input.getButton('right') ? 1.0 : 0.0)) * this.rotateSpeed) * (Math.PI / 180.0)) * delta,
         0
       )))
+
+    globalRotation.copy(this.rotation)
 
     /* const rotObjectMatrix = new THREE.Matrix4()
     rotObjectMatrix.makeRotationFromQuaternion(
@@ -513,15 +881,44 @@ function FallGameComponent (entity) {
     // console.log(new THREE.Vector3().subVectors(this.lastPosition, game.view.camera.position).normalize())
 
     // Check collisions
-    if (this.velocity < 0.0) {
-      for (let i = 0; i < triangleList.length; i++) {
-        if (IntersectTriangle(this.lastPosition, this.directionVector.subVectors(game.view.camera.position, this.lastPosition).normalize(), triangleList[i].a, triangleList[i].b, triangleList[i].c, this.distanceVector.subVectors(this.lastPosition, game.view.camera.position).length() * 3)) {
+
+    for (let i = 0; i < triangleList.length; i++) {
+      if (triangleList[i].enabled !== undefined) {
+        continue
+      }
+
+      if (this.stageScale <= 1) {
+        triangleList[i].mesh.scale.set(easeOutBack(this.stageScale, 3), easeOutBack(this.stageScale, 3), easeOutBack(this.stageScale, 3))
+      } else if (this.finishedScaling === false) {
+        triangleList[i].mesh.scale.set(1, 1, 1)
+      }
+      triangleList[i].mesh.rotation.setFromVector3(triangleList[i].mesh.rotation.toVector3().add(triangleList[i].rotateAxis.clone().multiplyScalar(triangleList[i].rotateSpeed * delta)))
+
+      const currentTriangleConvertedA = triangleList[i].mesh.localToWorld(triangleList[i].triangle.a.clone())
+      const currentTriangleConvertedB = triangleList[i].mesh.localToWorld(triangleList[i].triangle.b.clone())
+      const currentTriangleConvertedC = triangleList[i].mesh.localToWorld(triangleList[i].triangle.c.clone())
+
+      if (this.velocity < 0.0) {
+        if (IntersectTriangle(this.lastPosition, this.directionVector.subVectors(game.view.camera.position, this.lastPosition).normalize(), currentTriangleConvertedA, currentTriangleConvertedB, currentTriangleConvertedC, Math.max(this.distanceVector.subVectors(this.lastPosition, game.view.camera.position).length() * 3, 1.4))) {
           this.velocity = this.bounceVelocity
-          shieldPercentPrevious = clamp(this.killTimer, 0.0, this.timeToKill) / this.timeToKill
-          this.killTimer = clamp(this.killTimer - 1.0, 0.0, this.timeToKill)
+          if (triangleList[i].type === TriangleType.BAD) {
+            shieldPercentPrevious = clamp(this.killTimer, 0.0, this.timeToKill) / this.timeToKill
+            this.killTimer = clamp(this.killTimer - 1.0, 0.0, this.timeToKill)
+          } else if (triangleList[i].type === TriangleType.GOOD) {
+            this.killTimer = clamp(this.killTimer + 0.5, 0.0, this.timeToKill)
+          }
+
+          triangleList[i].mesh.geometry.dispose()
+          game.scene.remove(triangleList[i].mesh)
+          game.renderer.renderLists.dispose()
+          triangleList[i].enabled = false
           break
         }
       }
+    }
+
+    if (this.stageScale > 1 && this.finishedScaling === false) {
+      this.finishedScaling = true
     }
     /* if (this.velocity < 0) {
       for (let i = 0; i < triangleList.length; i++) {
@@ -551,17 +948,26 @@ timer -= 1f;
 
     // We've arrived and the timer has finished
     if (this.distanceFromCenter <= 0.0) {
-      this.velocity = this.bounceVelocity
       if (this.killTimer >= this.timeToKill) {
-        console.log('Congratulations, you killed the ogre!')
+        console.log('Congratulations, you killed the ogre!') // Next stage here
       } else {
         console.error('Oh no, you died! Try again!')
       }
+      this.velocity = 0.0
       this.killTimer = 0.0
       shieldPercentPrevious = 0.0
+      this.distanceFromCenter = this.maxDistanceFromCenter
+      game.board.setupStage(0, 0, 0, 4)
+      for (let i = 0; i < game.board.objects.length; i++) {
+        game.board.objects[i].sendMessage('newRound')
+      }
+      this.stageScale = 0.0
     }
   }
 }
+
+const debug = false
+const log = (text) => (debug ? console.log(text) : null)
 
 function Game () {
   this.renderer = null
@@ -585,6 +991,7 @@ function Game () {
     this.input.install()
     this.fitViewport()
     window.addEventListener('resize', this.fitViewport, false)
+    log('installed everything')
   }
 
   this.start = () => {
@@ -594,10 +1001,11 @@ function Game () {
       this.ui.start()
       this.view.start()
       this.board.start()
+      this.renderer.setAnimationLoop(this.update)
+      log('started everything and set animation loop')
       // this.ui.addText(320 / 2 + 1, 240 / 2 + 1, 'Hello!', 0x000000)
       // this.ui.addText(320 / 2, 240 / 2, 'Hello!')
       // this.board.addSphere(0.0, 0.0, 0.0, 0.5)
-      this.renderer.setAnimationLoop(this.update)
     })
   }
 
@@ -634,7 +1042,11 @@ function Game () {
 
   this.ensureResources = (callback) => {
     this.ui.ensureResources(() => {
-      callback()
+      log('ensured ui')
+      this.board.ensureResources(() => {
+        log('ensured board textures')
+        callback()
+      })
     })
   }
 
