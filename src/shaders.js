@@ -294,15 +294,19 @@ const BulletParticleVert = `precision lowp float;
 
 uniform mat4 modelViewMatrix;
 uniform mat4 projectionMatrix;
+uniform vec3 color;
 
 attribute vec3 position;
 
 varying float vDistance;
+varying float vDistanceCamera;
+varying vec4 vColor;
 
 void main() {
     vDistance = length(position);
 
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+	vDistanceCamera = -mvPosition.z;
     gl_PointSize = 200.0 / -mvPosition.z;
     gl_Position = projectionMatrix * mvPosition;
 
@@ -312,6 +316,17 @@ void main() {
     snapped.y = floor(120.0 * snapped.y) / 120.0;
     snapped.xyz = snapped.xyz * vec3(gl_Position.w);
     gl_Position = snapped;
+
+	vColor = vec4(color, 1.0);
+
+    //vec4 fogColor = c * 0.86; // 0.8
+    float fogFactor = smoothstep(9.0, 0.0, vDistance);
+    vColor = mix(vColor, vec4(vColor.xyz * 0.86, vColor.w), fogFactor);
+
+	vColor = mix(vColor, vec4(1.0, 0.0, 0.0, 1.0), smoothstep(8.0, 4.0, vDistanceCamera));
+
+    float deathFactor = smoothstep(18.4, 20.0, vDistance);
+    vColor = mix(vColor, vec4(0.0), deathFactor);
 }`
 
 const BulletParticleFrag = `precision lowp float;
@@ -319,20 +334,28 @@ const BulletParticleFrag = `precision lowp float;
 uniform vec3 color;
 
 varying float vDistance;
+varying float vDistanceCamera;
+varying vec4 vColor;
 
 void main() {
     vec3 c = color;
     float l = length((floor(gl_PointCoord.xy * 16.0) / 16.0) - vec2(0.5, 0.5));
     if (l > 0.475) discard;
-    //if (l > 0.405) c = vec3(0.0, 1.0, 0.8);
-	c = mix(c, vec3(0.0, 1.0, 0.8), float(l > 0.405));
+    ////if (l > 0.405) c = vec3(0.0, 1.0, 0.8);
 
-    gl_FragColor = vec4(c, 1.0);
+	gl_FragColor = mix(vColor, vec4(0.0, 1.0, 0.8, 1.0), float(l > 0.405));
+    //c = mix(c, vec3(0.0, 1.0, 0.8), float(l > 0.405));
 
-    vec3 fogColor = c * 0.8;
-    float fogFactor = smoothstep(10.0, 0.0, vDistance);
+    //gl_FragColor = vec4(c, 1.0);
 
-    gl_FragColor = mix(gl_FragColor, vec4(fogColor, gl_FragColor.w ), fogFactor);
+    //vec3 fogColor = c * 0.86; // 0.8
+    //float fogFactor = smoothstep(9.0, 0.0, vDistance);
+    //gl_FragColor = mix(gl_FragColor, vec4(fogColor, gl_FragColor.w), fogFactor);
+
+	//gl_FragColor = mix(gl_FragColor, vec4(1.0, 0.0, 0.0, 1.0), smoothstep(8.0, 4.0, vDistanceCamera));
+
+    //float deathFactor = smoothstep(18.4, 20.0, vDistance);
+    //gl_FragColor = mix(gl_FragColor, vec4(0), deathFactor);
 }`
 
 export { PSXVert, PSXFrag, PSXFragNoTexture, PSXFragUI, BulletParticleVert, BulletParticleFrag }

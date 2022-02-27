@@ -410,7 +410,7 @@ function Board () {
     wing2.rotateZ(-30 * (Math.PI / 180))
     entity.addComponent(MeshComponent, wing2)
 
-    entity.addComponent(LookAtCameraComponent, 180)
+    entity.addComponent(LookAtCameraComponent)
     entity.addComponent(NewRoundSquishComponent, 0.6, 1.6)
 
     game.board.objects.push(entity)
@@ -601,7 +601,7 @@ function NewRoundSquishComponent (entity, scale = 0.7, time = 1) {
   }
 }
 
-function LookAtCameraComponent (entity, speed) {
+function LookAtCameraComponent (entity, speed = 100) {
   this.entity = entity
   // this.lastPosition = new THREE.Vector3().copy(game.view.camera.position)
   // this.target = new THREE.Vector3().copy(game.view.camera.position)
@@ -620,15 +620,17 @@ function LookAtCameraComponent (entity, speed) {
   }
 }
 
+const pointList = []
+
 function BulletParticleComponent (entity) {
   this.entity = entity
   this.lifetime = 0
-  this.maxLifetime = 3
+  this.maxLifetime = 5
   this.particleRadius = 0.2
   this.particleCount = 25
   // this.particleGlobalScale = 16
   this.emitRate = 0 // 0.5
-  this.rootOfCount = Math.sqrt(this.particleCount)
+  this.directions = []
 
   //   for (let i = 0; i < this.particleCount; i++) {
   //     pointList.push({
@@ -639,14 +641,15 @@ function BulletParticleComponent (entity) {
 
   const particleMaterial = new THREE.RawShaderMaterial({
     uniforms: {
-      color: { value: new THREE.Vector3(1.0, 1.0, 1.0) }//,
+      color: { value: new THREE.Vector3(1.0, 1.0, 1.0) }//, // 0.0, 1.0, 0.8
       // scale: { value: this.particleGlobalScale }
     },
     vertexShader: SHADER.BulletParticleVert,
     fragmentShader: SHADER.BulletParticleFrag,
-    depthTest: true,
-    depthWrite: true,
-    blending: THREE.AdditiveBlending
+    depthTest: false, // TODO: Think about this
+    depthWrite: false,
+    // blending: THREE.AdditiveBlending,
+    transparent: true
   })
 
   const positions = new Float32Array(this.particleCount * 3)
@@ -657,71 +660,55 @@ function BulletParticleComponent (entity) {
 
   entity.transform.add(this.particles)
 
-  // If type is sphere here, do this:
+  // If emit type is sphere, do this:
   let row = 0
+  const rootOfCount = Math.sqrt(this.particleCount)
   for (let i = 0; i < positions.length; i += 3) {
-    const offset = i / 3
-    const cell = offset % (this.rootOfCount)
+    const cell = (i / 3) % (rootOfCount)
     if (cell === 0) {
       row += 1
     }
 
-    positions[i] = cell - ((this.rootOfCount - 1) / 2)
-    positions[i + 1] = row - ((this.rootOfCount + 1) / 2)
-    positions[i + 2] = 2.8// 2.8
+    const x = cell - ((rootOfCount - 1) / 2)
+    const y = row - ((rootOfCount + 1) / 2)
+    const z = 2.8
 
-    const vector = new THREE.Vector3(positions[i], positions[i + 1], positions[i + 2]).divideScalar(Math.sqrt(positions[i] * positions[i] + positions[i + 1] * positions[i + 1] + positions[i + 2] * positions[i + 2])).multiplyScalar(8)
-    positions[i] = vector.x
-    positions[i + 1] = vector.y
-    positions[i + 2] = vector.z
+    this.directions.push(new THREE.Vector3(x, y, z).divideScalar(Math.sqrt(x * x + y * y + z * z)).normalize())
+
+    pointList.push(new THREE.Vector3())
   }
 
   this.update = (delta) => {
     this.lifetime += delta
 
+    /* if (this.directions.length < this.particleCount) {
+      return
+    } */
+
     const positions = this.particles.geometry.attributes.position.array
-    const percentFinished = this.maxLifetime / this.lifetime
+    // const percentFinished = this.maxLifetime / this.lifetime
 
-    let row = 0
     for (let i = 0; i < positions.length; i += 3) {
-      const offset = i / 3
-	  const cell = offset % (this.rootOfCount)
-      if (cell === 0) {
-        row += 1
+      if (this.lifetime > (this.emitRate * (i / 3))) {
+        // positions[i] += delta * 6
+        positions[i] += this.directions[i / 3].x * 4 * delta // 6
+        positions[i + 1] += this.directions[i / 3].y * 4 * delta
+        positions[i + 2] += this.directions[i / 3].z * 4 * delta
+
+        pointList[i / 3].x = positions[i]
+        pointList[i / 3].y = positions[i + 1]
+        pointList[i / 3].z = positions[i + 2]
       }
-
-	  positions[i] = cell - ((this.rootOfCount - 1) / 2)
-	  positions[i + 1] = row - ((this.rootOfCount + 1) / 2)
-	  positions[i + 2] = 2.8// 2.8
-
-      //   const x2 = positions[i] * positions[i]
-      //   const y2 = positions[i + 1] * positions[i + 1]
-      //   const z2 = positions[i + 2] * positions[i + 2]
-      //   const x = positions[i] * Math.sqrt(1 - (y2 + z2) / 2 + (y2 * z2) / 3)
-      //   const y = positions[i + 1] * Math.sqrt(1 - (z2 + x2) / 2 + (z2 * x2) / 3)
-      //   const z = positions[i + 2] * Math.sqrt(1 - (x2 + y2) / 2 + (x2 * y2) / 3)
-
-      //   positions[i] = x
-      //   positions[i + 1] = y
-      //   positions[i + 2] = z
-	  const vector = new THREE.Vector3(positions[i], positions[i + 1], positions[i + 2]).divideScalar(Math.sqrt(positions[i] * positions[i] + positions[i + 1] * positions[i + 1] + positions[i + 2] * positions[i + 2])).multiplyScalar(8)
-      positions[i] = vector.x
-	  positions[i + 1] = vector.y
-	  positions[i + 2] = vector.z
-      // const row = offset % ((positions.length / 3) / 2)
-      /* if (this.lifetime > (this.emitRate * offset)) {
-positions[i] += delta * 6
-} */
-      // positions[i] += delta * offset// lerp(0, 8, clamp(percentFinished + offset, 0, 1)) // Math.sin((angle + percentFinished) * (Math.PI / 180)) * this.particleGlobalScale
-      // positions[i + 1] = //Math.sin((angle + percentFinished) * (Math.PI / 180)) * this.particleGlobalScale
-      // positions[i + 2] = //Math.sin((angle + percentFinished) * (Math.PI / 180)) * this.particleGlobalScale
     }
 
     if (this.lifetime > this.maxLifetime) {
       this.lifetime = 0
       // Reset points
+      // TODO: Destroy here
       for (let i = 0; i < positions.length; i += 3) {
         positions[i] = 0
+        positions[i + 1] = 0
+        positions[i + 2] = 0
       }
     }
 
@@ -795,10 +782,14 @@ function IntersectTriangle (ROrigin, RDir, A, B, C, len) {
   const u = E2.dot(DAO) * invdet
   const v = -E1.dot(DAO) * invdet
   const t = AO.dot(N) * invdet
-  if (det >= 0.000001 && t >= 0.0 && t <= len && u >= 0.0 && v >= 0.0 && (u + v) <= 1.0) {
+  /* if (det >= 0.000001 && t >= 0.0 && t <= len && u >= 0.0 && v >= 0.0 && (u + v) <= 1.0) {
     console.log(`${t} ${len}`)
-  }
+  } */
   return (det >= 0.000001 && t >= 0.0 && t <= len && u >= 0.0 && v >= 0.0 && (u + v) <= 1.0)
+}
+
+function IntersectSphere (POrigin, SOrigin, R) {
+  return POrigin.distanceTo(SOrigin) < R
 }
 
 let shieldPercent = 0.0
@@ -913,6 +904,19 @@ function FallGameComponent (entity) {
           game.renderer.renderLists.dispose()
           triangleList[i].enabled = false
           break
+        }
+      }
+    }
+
+    game.view.camera.getWorldDirection(this.directionVector)
+    this.directionVector.multiplyScalar(Math.max(this.distanceVector.subVectors(this.lastPosition, game.view.camera.position).length() * 3, 1.4))
+    this.directionVector = game.view.camera.position.clone().add(this.directionVector)
+
+    if (this.velocity < 0.0) {
+      for (let i = 0; i < pointList.length; i++) {
+        // this.axis.position.copy(this.directionVector)
+        if (IntersectSphere(this.directionVector, pointList[i], 0.7)) {
+          this.velocity = this.bounceVelocity // TODO: Remove lives here, then death
         }
       }
     }
