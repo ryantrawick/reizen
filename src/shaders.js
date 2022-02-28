@@ -337,13 +337,77 @@ varying float vDistance;
 varying float vDistanceCamera;
 varying vec4 vColor;
 
+// const mat4 psxDitherTable = mat4(
+//     0,    8,    2,    10,
+//     12,    4,    14,    6, 
+//     3,    11,    1,    9, 
+//     15,    7,    13,    5
+// );
+
+// float getData(int x, int y) {
+//     for (int i = 0; i < 16; i++) {
+//         if (i == x) {
+//             for (int j = 0; j < 16; j++) {
+//                 if (j == y) {
+//                     return psxDitherTable[i][j];
+//                 }
+//             }
+//         }
+//     }
+// }
+
+const int BIT_COUNT = 8;
+
+int modi(int x, int y) {
+    return x - y * (x / y);
+}
+
+int and(int a, int b) {
+    int result = 0;
+    int n = 1;
+
+    for(int i = 0; i < BIT_COUNT; i++) {
+        if ((modi(a, 2) == 1) && (modi(b, 2) == 1)) {
+            result += n;
+        }
+
+        a = a / 2;
+        b = b / 2;
+        n = n * 2;
+
+        if(!(a > 0 && b > 0)) {
+            break;
+        }
+    }
+    return result;
+}
+
+vec3 ditherCrunch(vec3 col, vec2 p) {
+    col = col * vec3(255.0);
+
+    int x = int(mod(p.x, 4.0));
+    int y = int(mod(p.y, 4.0));
+    // float dither = getData(x, y);
+    // col = col + (dither / 2.0 - 4.0);
+
+    col.r = mix(float(and(int(floor(col.r)), 248)), 248.0, step(248.0, col.r));
+    col.g = mix(float(and(int(floor(col.g)), 248)), 248.0, step(248.0, col.g));
+    col.b = mix(float(and(int(floor(col.b)), 248)), 248.0, step(248.0, col.b));
+
+    col = col / vec3(255.0);
+
+    return col;
+}
+
 void main() {
-    vec3 c = color;
+    // vec3 c = color;
     float l = length((floor(gl_PointCoord.xy * 16.0) / 16.0) - vec2(0.5, 0.5));
     if (l > 0.475) discard;
     ////if (l > 0.405) c = vec3(0.0, 1.0, 0.8);
 
-	gl_FragColor = mix(vColor, vec4(0.0, 1.0, 0.8, 1.0), float(l > 0.405));
+
+	vec3 c = ditherCrunch(vColor.xyz, gl_FragCoord.xy);
+	gl_FragColor = mix(vec4(c, vColor.w), vec4(ditherCrunch(vec3(0.0, 1.0, 0.8), gl_FragCoord.xy), 1.0), float(l > 0.405)); // vec4(0.0, 1.0, 0.8, 1.0)
     //c = mix(c, vec3(0.0, 1.0, 0.8), float(l > 0.405));
 
     //gl_FragColor = vec4(c, 1.0);

@@ -50,6 +50,7 @@ function UI () {
   this.progressArrow = null
   this.progressText = null
   this.progressTextShadow = null
+  this.girlHeadIcon = null
 
   // const charCounter = 0
   // const charIndex = 0
@@ -67,27 +68,21 @@ function UI () {
 
   this.start = () => {
     const progressBar = new PIXI.Sprite(this.loader.resources.progress_bar_empty.texture)
-    progressBar.position.x = 129 * 2
-    progressBar.position.y = 8 * 2
-    // progressBar.height *= 2
-    // progressBar.width *= 2
+    progressBar.position.x = 279 // 129 * 2
+    progressBar.position.y = 133 // 8 * 2
     const simpleShader = new PIXI.Filter('', SHADER.PSXFragUI)
     progressBar.filters = [simpleShader]
     this.stage.addChild(progressBar)
 
     const progressBarLoss = new PIXI.Sprite(this.loader.resources.progress_bar_loss.texture)
-    progressBarLoss.position.x = 129 * 2
-    progressBarLoss.position.y = 8 * 2
-    // progressBarLoss.height *= 2
-    // progressBarLoss.width *= 2
+    progressBarLoss.position.x = 279 // 129 * 2
+    progressBarLoss.position.y = 133 // 8 * 2
     progressBarLoss.filters = [simpleShader]
     this.stage.addChild(progressBarLoss)
 
     const progressBarFull = new PIXI.Sprite(this.loader.resources.progress_bar_full.texture)
-    progressBarFull.position.x = 129 * 2
-    progressBarFull.position.y = 8 * 2
-    // progressBarFull.height *= 2
-    // progressBarFull.width *= 2
+    progressBarFull.position.x = 279 // 129 * 2
+    progressBarFull.position.y = 133 // 8 * 2
     progressBarFull.filters = [simpleShader]
     this.stage.addChild(progressBarFull)
 
@@ -107,21 +102,33 @@ function UI () {
 
     this.progressTextShadow = this.addText(262 + 1, 4 + 1, '', 0x000000, 1, 1)
     this.progressText = this.addText(262, 4, '', 0xffffff, 1, 1)
+
+    const distanceMeter = new PIXI.Sprite(this.loader.resources.distance_meter.texture)
+    distanceMeter.position.x = 311 // 129 * 2
+    distanceMeter.position.y = 17 // 8 * 2
+    distanceMeter.filters = [simpleShader]
+    this.stage.addChild(distanceMeter)
+
+    this.girlHeadIcon = new PIXI.Sprite(this.loader.resources.girl_head_icon.texture)
+    this.girlHeadIcon.filters = [simpleShader]
+    this.girlHeadIcon.anchor.x = 5 / 16
+    this.girlHeadIcon.anchor.y = 0.5
+    this.stage.addChild(this.girlHeadIcon)
   }
 
   this.render = () => {
     this.progressBarLossMask.clear()
     this.progressBarLossMask.beginFill()
-    this.progressBarLossMask.drawRect(129 * 2, 8 * 2 + roundMod((107 * Math.abs(shieldPercentPrevious - 1)) * 2, 2), 29 * 2, 107 * 2)
+    this.progressBarLossMask.drawRect(279, 133 + (107 * Math.abs(shieldPercentPrevious - 1)), 29, 107)
     this.progressBarLossMask.endFill()
 
     this.progressBarMask.clear()
     this.progressBarMask.beginFill()
-    this.progressBarMask.drawRect(129 * 2, 8 * 2 + roundMod((107 * Math.abs(shieldPercent - 1)) * 2, 2), 29 * 2, 107 * 2)
+    this.progressBarMask.drawRect(279, 133 + (107 * Math.abs(shieldPercent - 1)), 29, 107)
     this.progressBarMask.endFill()
 
-    this.progressArrow.position.x = roundMod(lerp(143 * 2, 126 * 2, shieldPercent), 2) // * 2
-    this.progressArrow.position.y = roundMod(lerp(113 * 2, 7 * 2, shieldPercent), 2) // * 2
+    this.progressArrow.position.x = lerp(294, 277, shieldPercent)
+    this.progressArrow.position.y = lerp(238, 133, shieldPercent)
 
     this.progressText.position.x = this.progressArrow.position.x
     this.progressText.position.y = this.progressArrow.position.y
@@ -130,10 +137,12 @@ function UI () {
     this.progressTextShadow.position.y = this.progressArrow.position.y + 1
     this.progressTextShadow.text = `${Math.round(shieldPercent * 100)}&`
 
+    this.girlHeadIcon.position.x = 311
+    this.girlHeadIcon.position.y = lerp(17, 233, clamp(Math.abs(percentFromMiddle), 0, 1))
+
     this.renderer.render(this.stage)
   }
 
-  // Needs to return a handle or something
   this.addText = (x, y, text, color = 0xffffff, anchorX = 0, anchorY = 0) => {
     const newText = new PIXI.BitmapText(text, {
       fontName: 'kakwa',
@@ -156,6 +165,8 @@ function UI () {
       .add('progress_bar_full', 'assets/progress_bar_lit.png')
       .add('progress_bar_arrow', 'assets/progress_bar_arrow6.png')
       .add('progress_bar_loss', 'assets/progress_bar_lost.png')
+      .add('distance_meter', 'assets/distance_meter.png')
+      .add('girl_head_icon', 'assets/magical_girl_head_tracker.png')
       .load(() => {
         callback()
       })
@@ -178,6 +189,8 @@ function Board () {
   this.magicGirlTexture = null
   this.angelWingGeometry3 = null
   this.panelMaterial = null
+  this.angelColor = new THREE.Vector3(1, 1, 1)
+  this.bayerTexture = null
 
   this.install = () => {}
 
@@ -195,6 +208,11 @@ function Board () {
           new THREE.PLYLoader().load('assets/angel_wing_3.ply', (object2) => {
             this.angelWingGeometry3 = object2
             callback()
+            /* new THREE.TextureLoader().load('assets/bayer_16_tile_2.png', (texture3) => {
+              texture3.magFilter = THREE.NearestFilter
+              texture3.minFilter = THREE.NearestFilter
+              this.bayerTexture = texture3
+            }) */
           })
         })
       })
@@ -386,7 +404,7 @@ function Board () {
 
     const vertexMaterial = new THREE.RawShaderMaterial({
       uniforms: {
-        tintColor: { value: new THREE.Vector3(1.0, 1.0, 1.0) }
+        tintColor: { value: this.angelColor }
       },
       vertexShader: SHADER.PSXVert,
       fragmentShader: SHADER.PSXFragNoTexture,
@@ -581,23 +599,25 @@ function MeshComponent (entity, mesh) {
   this.update = (delta) => {}
 }
 
+let angelCountUpTime = 0
+
 function NewRoundSquishComponent (entity, scale = 0.7, time = 1) {
   this.entity = entity
-  this.countUpTime = 1
+  // this.countUpTime = 0
 
   this.update = (delta) => {
-    if (this.countUpTime > 1) {
+    if (angelCountUpTime > 1) {
       return
     }
 
-    this.countUpTime += delta * time
+    angelCountUpTime += delta * time
 
-    this.entity.transform.scale.y = lerp(scale, 1, easeOutBack(this.countUpTime, 3))
-    this.entity.transform.scale.x = lerp(scale * 1.8, 1, easeOutBack(this.countUpTime, 3))
+    this.entity.transform.scale.y = lerp(scale, 1, easeOutBack(angelCountUpTime, 3))
+    this.entity.transform.scale.x = lerp(scale * 1.8, 1, easeOutBack(angelCountUpTime, 3))
   }
 
   this.newRound = () => {
-    this.countUpTime = 0
+    angelCountUpTime = 0
   }
 }
 
@@ -641,7 +661,8 @@ function BulletParticleComponent (entity) {
 
   const particleMaterial = new THREE.RawShaderMaterial({
     uniforms: {
-      color: { value: new THREE.Vector3(1.0, 1.0, 1.0) }//, // 0.0, 1.0, 0.8
+      color: { value: new THREE.Vector3(1.0, 1.0, 1.0) }//, //, // 0.0, 1.0, 0.8
+      // bayer: { map: game.board.bayerTexture }
       // scale: { value: this.particleGlobalScale }
     },
     vertexShader: SHADER.BulletParticleVert,
@@ -689,6 +710,13 @@ function BulletParticleComponent (entity) {
     // const percentFinished = this.maxLifetime / this.lifetime
 
     for (let i = 0; i < positions.length; i += 3) {
+      if (pointList[i / 3].x < -1000) {
+        positions[i] = pointList[i / 3].x
+        positions[i + 1] = pointList[i / 3].y
+        positions[i + 2] = pointList[i / 3].z
+        continue
+      }
+
       if (this.lifetime > (this.emitRate * (i / 3))) {
         // positions[i] += delta * 6
         positions[i] += this.directions[i / 3].x * 4 * delta // 6
@@ -704,6 +732,7 @@ function BulletParticleComponent (entity) {
     if (this.lifetime > this.maxLifetime) {
       this.lifetime = 0
       // Reset points
+      angelCountUpTime = 0.1
       // TODO: Destroy here
       for (let i = 0; i < positions.length; i += 3) {
         positions[i] = 0
@@ -799,6 +828,7 @@ const easeOutBack = (t, s = 1) => 1 + (2.70158 * s) * Math.pow(clamp(t, 0, 1) - 
 const easeOutBackNoClamp = (t, s = 1) => 1 + (2.70158 * s) * Math.pow(t - 1, 3) + (1.70158 * s) * Math.pow(t - 1, 2)
 const globalRotation = new THREE.Quaternion()
 let globalVelocity = 0
+let percentFromMiddle = 0
 
 function FallGameComponent (entity) {
   this.entity = entity
@@ -838,6 +868,7 @@ function FallGameComponent (entity) {
     }
     this.velocity += this.acceleration * delta
     globalVelocity = this.velocity
+    percentFromMiddle = this.distanceFromCenter / this.maxDistanceFromCenter
 
     this.stageScale += delta * 2
 
@@ -894,7 +925,8 @@ function FallGameComponent (entity) {
           this.velocity = this.bounceVelocity
           if (triangleList[i].type === TriangleType.BAD) {
             shieldPercentPrevious = clamp(this.killTimer, 0.0, this.timeToKill) / this.timeToKill
-            this.killTimer = clamp(this.killTimer - 1.0, 0.0, this.timeToKill)
+            // this.killTimer = clamp(this.killTimer - 1.0, 0.0, this.timeToKill)
+            this.killTimer = clamp(this.killTimer - 2.5, 0.0, this.timeToKill)
           } else if (triangleList[i].type === TriangleType.GOOD) {
             this.killTimer = clamp(this.killTimer + 0.5, 0.0, this.timeToKill)
           }
@@ -917,6 +949,10 @@ function FallGameComponent (entity) {
         // this.axis.position.copy(this.directionVector)
         if (IntersectSphere(this.directionVector, pointList[i], 0.7)) {
           this.velocity = this.bounceVelocity // TODO: Remove lives here, then death
+		  pointList[i].x = -2000
+          pointList[i].y = -2000
+          pointList[i].z = -2000
+		  break
         }
       }
     }
