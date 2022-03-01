@@ -202,6 +202,62 @@ void main() {
     gl_FragColor = diffuseColor;
 }`
 
+const PSXFragNoTextureNoDither = `precision lowp float;
+
+uniform vec3 tintColor;
+
+varying vec3 vColor;
+
+const int BIT_COUNT = 8;
+
+int modi(int x, int y) {
+    return x - y * (x / y);
+}
+
+int and(int a, int b) {
+    int result = 0;
+    int n = 1;
+
+    for(int i = 0; i < BIT_COUNT; i++) {
+        if ((modi(a, 2) == 1) && (modi(b, 2) == 1)) {
+            result += n;
+        }
+
+        a = a / 2;
+        b = b / 2;
+        n = n * 2;
+
+        if(!(a > 0 && b > 0)) {
+            break;
+        }
+    }
+    return result;
+}
+
+vec3 ditherCrunch(vec3 col, vec2 p) {
+    col = col * vec3(255.0);
+
+    int x = int(mod(p.x, 4.0));
+    int y = int(mod(p.y, 4.0));
+    //float dither = getData(x, y);
+    //col = col + (dither / 2.0 - 4.0);
+
+    col.r = mix(float(and(int(floor(col.r)), 248)), 248.0, step(248.0, col.r));
+    col.g = mix(float(and(int(floor(col.g)), 248)), 248.0, step(248.0, col.g));
+    col.b = mix(float(and(int(floor(col.b)), 248)), 248.0, step(248.0, col.b));
+
+    col = col / vec3(255.0);
+
+    return col;
+}
+
+void main() {
+    vec4 diffuseColor = vec4(vColor, 1.0);
+    diffuseColor.xyz = diffuseColor.xyz * tintColor;
+    diffuseColor.xyz = ditherCrunch(diffuseColor.xyz, gl_FragCoord.xy);
+    gl_FragColor = diffuseColor;
+}`
+
 const PSXFragUI = `precision lowp float;
 
 //uniform sampler2D map;
@@ -422,4 +478,4 @@ void main() {
     //gl_FragColor = mix(gl_FragColor, vec4(0), deathFactor);
 }`
 
-export { PSXVert, PSXFrag, PSXFragNoTexture, PSXFragUI, BulletParticleVert, BulletParticleFrag }
+export { PSXVert, PSXFrag, PSXFragNoTexture, PSXFragNoTextureNoDither, PSXFragUI, BulletParticleVert, BulletParticleFrag }

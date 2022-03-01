@@ -51,6 +51,10 @@ function UI () {
   this.progressText = null
   this.progressTextShadow = null
   this.girlHeadIcon = null
+  this.live1 = null
+  // this.live1Background = null
+  this.live2 = null
+  // this.live2Background = null
 
   // const charCounter = 0
   // const charIndex = 0
@@ -114,6 +118,30 @@ function UI () {
     this.girlHeadIcon.anchor.x = 5 / 16
     this.girlHeadIcon.anchor.y = 0.5
     this.stage.addChild(this.girlHeadIcon)
+
+    const live1Background = new PIXI.Sprite(this.loader.resources.life_unlit.texture)
+    live1Background.position.x = 284 - 1
+    live1Background.position.y = 123
+    live1Background.filters = [simpleShader]
+    this.stage.addChild(live1Background)
+
+    this.live1 = new PIXI.Sprite(this.loader.resources.life_lit.texture)
+    this.live1.filters = [simpleShader]
+    this.live1.position.x = 284 - 1
+    this.live1.position.y = 123
+    this.stage.addChild(this.live1)
+
+    const live2Background = new PIXI.Sprite(this.loader.resources.life_unlit.texture)
+    live2Background.position.x = 296 - 1
+    live2Background.position.y = 123
+    live2Background.filters = [simpleShader]
+    this.stage.addChild(live2Background)
+
+    this.live2 = new PIXI.Sprite(this.loader.resources.life_lit.texture)
+    this.live2.filters = [simpleShader]
+    this.live2.position.x = 296 - 1
+    this.live2.position.y = 123
+    this.stage.addChild(this.live2)
   }
 
   this.render = () => {
@@ -139,6 +167,17 @@ function UI () {
 
     this.girlHeadIcon.position.x = 311
     this.girlHeadIcon.position.y = lerp(17, 233, clamp(Math.abs(percentFromMiddle), 0, 1))
+
+    if (lives === 2) {
+      this.live1.visible = true
+      this.live2.visible = true
+    } else if (lives === 1) {
+      this.live1.visible = false
+      this.live2.visible = true
+    } else {
+      this.live1.visible = false
+      this.live2.visible = false
+    }
 
     this.renderer.render(this.stage)
   }
@@ -167,6 +206,8 @@ function UI () {
       .add('progress_bar_loss', 'assets/progress_bar_lost.png')
       .add('distance_meter', 'assets/distance_meter.png')
       .add('girl_head_icon', 'assets/magical_girl_head_tracker.png')
+      .add('life_lit', 'assets/life_lit.png')
+      .add('life_unlit', 'assets/life_unlit.png')
       .load(() => {
         callback()
       })
@@ -190,7 +231,7 @@ function Board () {
   this.angelWingGeometry3 = null
   this.panelMaterial = null
   this.angelColor = new THREE.Vector3(1, 1, 1)
-  this.bayerTexture = null
+  this.gradientGeometry = null
 
   this.install = () => {}
 
@@ -207,7 +248,10 @@ function Board () {
           this.magicGirlTexture = texture2
           new THREE.PLYLoader().load('assets/angel_wing_3.ply', (object2) => {
             this.angelWingGeometry3 = object2
-            callback()
+            new THREE.PLYLoader().load('assets/12_inner_gradient_inner.ply', (object3) => { // _inner
+              this.gradientGeometry = object3
+              callback()
+            })
             /* new THREE.TextureLoader().load('assets/bayer_16_tile_2.png', (texture3) => {
               texture3.magFilter = THREE.NearestFilter
               texture3.minFilter = THREE.NearestFilter
@@ -238,6 +282,27 @@ function Board () {
     const bulletParticleEntity = new Entity(game.scene)
     bulletParticleEntity.addComponent(BulletParticleComponent)
     this.objects.push(bulletParticleEntity)
+
+    const gradientEntity = new Entity(game.scene)
+    const gradientMaterial = new THREE.RawShaderMaterial({
+      uniforms: {
+        tintColor: { value: new THREE.Vector3(0.8, 0.8, 0.8) }
+      },
+      vertexShader: SHADER.PSXVert,
+      fragmentShader: SHADER.PSXFragNoTextureNoDither,
+      depthTest: false,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    })
+    const gradientMesh = new THREE.Mesh(this.gradientGeometry, gradientMaterial)
+    gradientMesh.scale.multiply(new THREE.Vector3(1, 3, 4))
+    gradientMesh.scale.multiplyScalar(7) // 7.8 // 12
+    gradientMesh.rotateY(-90 * (Math.PI / 180))
+    gradientMesh.translateX(-8)
+    gradientEntity.addComponent(MeshComponent, gradientMesh)
+    gradientEntity.addComponent(EnableOnChargeComponent, gradientMaterial)
+    gradientEntity.transform.parent = game.view.camera
+    this.objects.push(gradientEntity)
 
     // this.addSphere(0, 1, 0, 2)
   }
@@ -552,6 +617,23 @@ function MoveComponent (entity, speed = 1) {
   }
 }
 
+const easeInOutQuint = (x) => x < 0.5 ? 16 * x * x * x * x * x : 1 - Math.pow(-2 * x + 2, 5) / 2
+
+function EnableOnChargeComponent (entity, material) {
+  this.entity = entity
+
+  this.update = (delta) => {
+    if (shieldPercent >= 1) {
+      entity.transform.visible = true
+	  material.uniforms.tintColor.value.x = lerp(1, 0.28, easeInOutQuint((Math.sin(game.elapsedTime * 5) + 1) / 2))
+	  material.uniforms.tintColor.value.y = lerp(1, 0.28, easeInOutQuint((Math.sin(game.elapsedTime * 5) + 1) / 2))
+	  material.uniforms.tintColor.value.z = lerp(1, 0.28, easeInOutQuint((Math.sin(game.elapsedTime * 5) + 1) / 2))
+    } else {
+      entity.transform.visible = false
+    }
+  }
+}
+
 function MagicGirlComponent (entity) {
   this.entity = entity
   // this.targetPosition = new THREE.Vector3()
@@ -823,6 +905,7 @@ function IntersectSphere (POrigin, SOrigin, R) {
 
 let shieldPercent = 0.0
 let shieldPercentPrevious = 0.0
+let lives = 2
 
 const easeOutBack = (t, s = 1) => 1 + (2.70158 * s) * Math.pow(clamp(t, 0, 1) - 1, 3) + (1.70158 * s) * Math.pow(clamp(t, 0, 1) - 1, 2)
 const easeOutBackNoClamp = (t, s = 1) => 1 + (2.70158 * s) * Math.pow(t - 1, 3) + (1.70158 * s) * Math.pow(t - 1, 2)
@@ -851,6 +934,7 @@ function FallGameComponent (entity) {
   this.directionVector = new THREE.Vector3()
   this.stageScale = 0.0
   this.finishedScaling = false
+  // this.lives = 2
   // this.cameraForward = new THREE.Vector3()
   // this.axis = new THREE.AxesHelper(3)
   // game.scene.add(this.axis)
@@ -927,8 +1011,10 @@ function FallGameComponent (entity) {
             shieldPercentPrevious = clamp(this.killTimer, 0.0, this.timeToKill) / this.timeToKill
             // this.killTimer = clamp(this.killTimer - 1.0, 0.0, this.timeToKill)
             this.killTimer = clamp(this.killTimer - 2.5, 0.0, this.timeToKill)
+            this.velocity = this.bounceVelocity * 0.8
           } else if (triangleList[i].type === TriangleType.GOOD) {
             this.killTimer = clamp(this.killTimer + 0.5, 0.0, this.timeToKill)
+            this.velocity = this.bounceVelocity * 1.3
           }
 
           triangleList[i].mesh.geometry.dispose()
@@ -944,15 +1030,22 @@ function FallGameComponent (entity) {
     this.directionVector.multiplyScalar(Math.max(this.distanceVector.subVectors(this.lastPosition, game.view.camera.position).length() * 3, 1.4))
     this.directionVector = game.view.camera.position.clone().add(this.directionVector)
 
-    if (this.velocity < 0.0) {
+    if (this.velocity < 0.0 && this.distanceFromCenter > 1) {
       for (let i = 0; i < pointList.length; i++) {
         // this.axis.position.copy(this.directionVector)
         if (IntersectSphere(this.directionVector, pointList[i], 0.7)) {
-          this.velocity = this.bounceVelocity // TODO: Remove lives here, then death
-		  pointList[i].x = -2000
+          this.velocity = this.bounceVelocity * 0.8
+          pointList[i].x = -2000
           pointList[i].y = -2000
           pointList[i].z = -2000
-		  break
+		  shieldPercentPrevious = clamp(this.killTimer, 0.0, this.timeToKill) / this.timeToKill
+		  this.killTimer = clamp(this.killTimer - 1.0, 0.0, this.timeToKill)
+          if (lives <= 0) {
+            this.newStage()
+          } else {
+            lives -= 1
+          }
+          break
         }
       }
     }
@@ -990,19 +1083,41 @@ timer -= 1f;
     if (this.distanceFromCenter <= 0.0) {
       if (this.killTimer >= this.timeToKill) {
         console.log('Congratulations, you killed the ogre!') // Next stage here
+        this.newStage()
+      } else if (lives > 0) {
+        this.velocity = this.bounceVelocity
+        lives -= 1
+        shieldPercentPrevious = clamp(this.killTimer, 0.0, this.timeToKill) / this.timeToKill
+        this.killTimer = clamp(this.killTimer - 2.5, 0.0, this.timeToKill)
       } else {
         console.error('Oh no, you died! Try again!')
+        this.newStage()
       }
-      this.velocity = 0.0
-      this.killTimer = 0.0
-      shieldPercentPrevious = 0.0
-      this.distanceFromCenter = this.maxDistanceFromCenter
-      game.board.setupStage(0, 0, 0, 4)
-      for (let i = 0; i < game.board.objects.length; i++) {
-        game.board.objects[i].sendMessage('newRound')
-      }
-      this.stageScale = 0.0
+      // TODO: If you are above the top stage, else die and back to menu/retry screen
+    //   this.velocity = 0.0
+    //   this.killTimer = 0.0
+    //   shieldPercentPrevious = 0.0
+    //   this.distanceFromCenter = this.maxDistanceFromCenter
+    //   game.board.setupStage(0, 0, 0, 4)
+    //   for (let i = 0; i < game.board.objects.length; i++) {
+    //     game.board.objects[i].sendMessage('newRound')
+    //   }
+    //   this.stageScale = 0.0
+      //   this.lives = 2
     }
+  }
+
+  this.newStage = () => {
+    this.velocity = 0.0
+    this.killTimer = 0.0
+    shieldPercentPrevious = 0.0
+    this.distanceFromCenter = this.maxDistanceFromCenter
+    game.board.setupStage(0, 0, 0, 4)
+    for (let i = 0; i < game.board.objects.length; i++) {
+      game.board.objects[i].sendMessage('newRound')
+    }
+    this.stageScale = 0.0
+    lives = 2
   }
 }
 
@@ -1018,6 +1133,7 @@ function Game () {
   this.clock = new THREE.Clock()
   this.scene = new THREE.Scene()
   this.state = State.INSTALL
+  this.elapsedTime = 0
 
   this.install = () => {
     this.renderer = new THREE.WebGL1Renderer({ antialias: false, stencil: false, depth: true })
@@ -1052,6 +1168,7 @@ function Game () {
   this.update = () => {
     this.state = State.UPDATE
     const delta = this.clock.getDelta()
+    this.elapsedTime += delta
     // const elapsedTime = clock.getElapsedTime()
 
     /* charCounter += delta / 0.03
