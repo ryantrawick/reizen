@@ -55,6 +55,8 @@ function UI () {
   // this.live1Background = null
   this.live2 = null
   // this.live2Background = null
+  this.overheatText = null
+  this.overheatTextShadow = null
 
   // const charCounter = 0
   // const charIndex = 0
@@ -142,6 +144,9 @@ function UI () {
     this.live2.position.x = 296 - 1
     this.live2.position.y = 123
     this.stage.addChild(this.live2)
+
+    this.overheatTextShadow = this.addTextGemma(320 / 2 + 1, 6 + 1, '16.23', 0x000000, 0.5, 0.5)
+    this.overheatText = this.addTextGemma(320 / 2, 6, '16.23', 0xffffff, 0.5, 0.5)
   }
 
   this.render = () => {
@@ -179,6 +184,17 @@ function UI () {
       this.live2.visible = false
     }
 
+    if (overheatTime > 0) {
+      this.overheatTextShadow.visible = true
+      this.overheatText.visible = true
+      this.overheatTextShadow.text = `${Math.abs(overheatTime - 8).toFixed(2)}`
+      this.overheatText.text = `${Math.abs(overheatTime - 8).toFixed(2)}`
+      this.overheatText.tint = rgbToHex(255, (overheatTime % 1.0) * 255, (overheatTime % 1.0) * 255)
+    } else {
+      this.overheatTextShadow.visible = false
+      this.overheatText.visible = false
+    }
+
     this.renderer.render(this.stage)
   }
 
@@ -197,9 +213,26 @@ function UI () {
     return newText
   }
 
+  this.addTextGemma = (x, y, text, color = 0xffffff, anchorX = 0, anchorY = 0) => {
+    const newText = new PIXI.BitmapText(text, {
+      fontName: 'gemma3',
+      fontSize: 8,
+      align: 'center',
+      tint: color
+    })
+    newText.anchor.set(anchorX, anchorY)
+    newText.position.x = x
+    newText.position.y = y
+    this.activeText.push(newText)
+    this.stage.addChild(newText)
+    return newText
+  }
+
   this.ensureResources = (callback) => {
+    // PIXI.LoaderResource.setExtensionXhrType('fnt', PIXI.LoaderResource.XHR_RESPONSE_TYPE.TEXT)
     this.loader
       .add('kakwa', 'assets/kakwa.fnt')
+      .add('gemma3', 'assets/gemma3.fnt')
       .add('progress_bar_empty', 'assets/progress_bar_unlit.png')
       .add('progress_bar_full', 'assets/progress_bar_lit.png')
       .add('progress_bar_arrow', 'assets/progress_bar_arrow6.png')
@@ -212,6 +245,19 @@ function UI () {
         callback()
       })
   }
+}
+
+// function componentToHex (c) {
+//   const hex = c.toString(16)
+//   return hex.length === 1 ? '0' + hex : hex
+// }
+
+// function rgbToHex (r, g, b) {
+//   return parseInt(`0x${componentToHex(r)}${componentToHex(g)}${componentToHex(b)}`, 16)
+// }
+
+function rgbToHex (r, g, b) {
+  return parseInt('0x' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1))
 }
 
 let triangleList = []
@@ -248,7 +294,7 @@ function Board () {
           this.magicGirlTexture = texture2
           new THREE.PLYLoader().load('assets/angel_wing_3.ply', (object2) => {
             this.angelWingGeometry3 = object2
-            new THREE.PLYLoader().load('assets/12_inner_gradient_inner.ply', (object3) => { // _inner
+            new THREE.PLYLoader().load('assets/12_inner_gradient.ply', (object3) => { // _inner
               this.gradientGeometry = object3
               callback()
             })
@@ -296,7 +342,7 @@ function Board () {
     })
     const gradientMesh = new THREE.Mesh(this.gradientGeometry, gradientMaterial)
     gradientMesh.scale.multiply(new THREE.Vector3(1, 3, 4))
-    gradientMesh.scale.multiplyScalar(7) // 7.8 // 12
+    gradientMesh.scale.multiplyScalar(12) // 7.8 // 12
     gradientMesh.rotateY(-90 * (Math.PI / 180))
     gradientMesh.translateX(-8)
     gradientEntity.addComponent(MeshComponent, gradientMesh)
@@ -720,6 +766,10 @@ function LookAtCameraComponent (entity, speed = 100) {
 
     // this.lastPosition.copy(game.view.camera.position)
   }
+
+  this.newRound = () => {
+    this.entity.transform.quaternion.copy(globalRotation)
+  }
 }
 
 const pointList = []
@@ -906,6 +956,7 @@ function IntersectSphere (POrigin, SOrigin, R) {
 let shieldPercent = 0.0
 let shieldPercentPrevious = 0.0
 let lives = 2
+let overheatTime = 0
 
 const easeOutBack = (t, s = 1) => 1 + (2.70158 * s) * Math.pow(clamp(t, 0, 1) - 1, 3) + (1.70158 * s) * Math.pow(clamp(t, 0, 1) - 1, 2)
 const easeOutBackNoClamp = (t, s = 1) => 1 + (2.70158 * s) * Math.pow(t - 1, 3) + (1.70158 * s) * Math.pow(t - 1, 2)
@@ -934,6 +985,7 @@ function FallGameComponent (entity) {
   this.directionVector = new THREE.Vector3()
   this.stageScale = 0.0
   this.finishedScaling = false
+  this.maxHeatTime = 8
   // this.lives = 2
   // this.cameraForward = new THREE.Vector3()
   // this.axis = new THREE.AxesHelper(3)
@@ -944,6 +996,24 @@ function FallGameComponent (entity) {
       this.killTimer += delta
     }
     shieldPercent = clamp(this.killTimer, 0.0, this.timeToKill) / this.timeToKill
+
+    if (this.killTimer >= this.timeToKill) {
+      overheatTime += delta
+
+      if (overheatTime > this.maxHeatTime) { // TODO: Explode here
+        shieldPercentPrevious = clamp(this.killTimer, 0.0, this.timeToKill) / this.timeToKill
+        this.killTimer = clamp(this.killTimer - 3.0, 0.0, this.timeToKill)
+        this.velocity = this.bounceVelocity * 1.1
+        overheatTime = 0
+        if (lives <= 0) {
+          this.newStage()
+        } else {
+          lives -= 1
+        }
+      }
+    } else {
+      overheatTime = 0
+    }
 
     this.velocity = clamp(this.velocity, this.terminalVelocityDown, this.terminalVelocityUp)
     this.distanceFromCenter += this.velocity * delta + 0.5 * this.acceleration * delta * delta
@@ -1011,7 +1081,7 @@ function FallGameComponent (entity) {
             shieldPercentPrevious = clamp(this.killTimer, 0.0, this.timeToKill) / this.timeToKill
             // this.killTimer = clamp(this.killTimer - 1.0, 0.0, this.timeToKill)
             this.killTimer = clamp(this.killTimer - 2.5, 0.0, this.timeToKill)
-            this.velocity = this.bounceVelocity * 0.8
+            this.velocity = this.bounceVelocity * 0.87
           } else if (triangleList[i].type === TriangleType.GOOD) {
             this.killTimer = clamp(this.killTimer + 0.5, 0.0, this.timeToKill)
             this.velocity = this.bounceVelocity * 1.3
