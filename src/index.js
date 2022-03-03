@@ -39,6 +39,7 @@ function View () {
 
 const roundMod = (num, multiple) => Math.round(num / multiple) * multiple
 const lerp = (v0, v1, t) => v0 * (1 - t) + v1 * t
+const easeOutQuint = (x) => 1 - Math.pow(1 - x, 5)
 
 function UI () {
   this.renderer = null
@@ -189,7 +190,7 @@ function UI () {
       this.overheatText.visible = true
       this.overheatTextShadow.text = `${Math.abs(overheatTime - 8).toFixed(2)}`
       this.overheatText.text = `${Math.abs(overheatTime - 8).toFixed(2)}`
-      this.overheatText.tint = rgbToHex(255, (overheatTime % 1.0) * 255, (overheatTime % 1.0) * 255)
+      this.overheatText.tint = rgbToHex(255, easeOutQuint(overheatTime % 1.0) * 255, easeOutQuint(overheatTime % 1.0) * 255)
     } else {
       this.overheatTextShadow.visible = false
       this.overheatText.visible = false
@@ -278,6 +279,7 @@ function Board () {
   this.panelMaterial = null
   this.angelColor = new THREE.Vector3(1, 1, 1)
   this.gradientGeometry = null
+  this.particleMaterial = null
 
   this.install = () => {}
 
@@ -326,7 +328,20 @@ function Board () {
     this.addGirl()
 
     const bulletParticleEntity = new Entity(game.scene)
-    bulletParticleEntity.addComponent(BulletParticleComponent)
+    this.particleMaterial = new THREE.RawShaderMaterial({
+      uniforms: {
+        color: { value: new THREE.Vector3(1.0, 1.0, 1.0) }//, //, // 0.0, 1.0, 0.8
+      // bayer: { map: game.board.bayerTexture }
+      // scale: { value: this.particleGlobalScale }
+      },
+      vertexShader: SHADER.BulletParticleVert,
+      fragmentShader: SHADER.BulletParticleFrag,
+      depthTest: false, // TODO: Think about this
+      depthWrite: false,
+      // blending: THREE.AdditiveBlending,
+      transparent: true
+    })
+    bulletParticleEntity.addComponent(BulletParticleComponent, this.particleMaterial)
     this.objects.push(bulletParticleEntity)
 
     const gradientEntity = new Entity(game.scene)
@@ -624,6 +639,7 @@ function Entity (parent) {
   this.components = []
   this.transform = new THREE.Object3D()
   parent.add(this.transform)
+  // this.requestDeletion = false // TODO: Get index here too, so board removal is easy, dispose function too
 
   this.addComponent = (ComponentType, ...args) => {
     const component = new ComponentType(this, ...args)
@@ -634,6 +650,30 @@ function Entity (parent) {
     for (const component of this.components) {
       component.update(delta)
     }
+  }
+  this.destroy = () => {
+    let index = 0
+    for (let i = 0; i < game.board.objects.length; i++) {
+      if (game.board.objects[i] === this) {
+        console.log('Removing entity')
+        index = i
+        break
+      }
+    }
+
+    for (const component of this.components) {
+      if (typeof component.destroy === 'function') {
+        component.destroy()
+      }
+    }
+
+    game.board.objects.splice(index, 1)
+
+    for (let i = this.transform.children.length - 1; i >= 0; i--) {
+      const obj = this.transform.children[i]
+      this.transform.remove(obj)
+    }
+    parent.remove(this.transform)
   }
   this.sendMessage = (name) => {
     for (const component of this.components) {
@@ -772,12 +812,12 @@ function LookAtCameraComponent (entity, speed = 100) {
   }
 }
 
-const pointList = []
+const pointLists = {}
 
-function BulletParticleComponent (entity) {
+function BulletParticleComponent (entity, particleMaterial) {
   this.entity = entity
   this.lifetime = 0
-  this.maxLifetime = 5
+  this.maxLifetime = 5 // Whatever lifetime gets the last bullet to 20 units, push way out beyond 20 for the single shots so they can't
   this.particleRadius = 0.2
   this.particleCount = 25
   // this.particleGlobalScale = 16
@@ -791,27 +831,19 @@ function BulletParticleComponent (entity) {
   //     })
   //   }
 
-  const particleMaterial = new THREE.RawShaderMaterial({
-    uniforms: {
-      color: { value: new THREE.Vector3(1.0, 1.0, 1.0) }//, //, // 0.0, 1.0, 0.8
-      // bayer: { map: game.board.bayerTexture }
-      // scale: { value: this.particleGlobalScale }
-    },
-    vertexShader: SHADER.BulletParticleVert,
-    fragmentShader: SHADER.BulletParticleFrag,
-    depthTest: false, // TODO: Think about this
-    depthWrite: false,
-    // blending: THREE.AdditiveBlending,
-    transparent: true
-  })
-
   const positions = new Float32Array(this.particleCount * 3)
   const particleGeometry = new THREE.BufferGeometry()
   particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
 
   this.particles = new THREE.Points(particleGeometry, particleMaterial)
 
+  particleGeometry.dispose()
+
   entity.transform.add(this.particles)
+
+  angelCountUpTime = 0.1
+
+  this.pointList = pointLists[this.entity.id] = []
 
   // If emit type is sphere, do this:
   let row = 0
@@ -828,7 +860,7 @@ function BulletParticleComponent (entity) {
 
     this.directions.push(new THREE.Vector3(x, y, z).divideScalar(Math.sqrt(x * x + y * y + z * z)).normalize())
 
-    pointList.push(new THREE.Vector3())
+    this.pointList.push(new THREE.Vector3())
   }
 
   this.update = (delta) => {
@@ -842,10 +874,10 @@ function BulletParticleComponent (entity) {
     // const percentFinished = this.maxLifetime / this.lifetime
 
     for (let i = 0; i < positions.length; i += 3) {
-      if (pointList[i / 3].x < -1000) {
-        positions[i] = pointList[i / 3].x
-        positions[i + 1] = pointList[i / 3].y
-        positions[i + 2] = pointList[i / 3].z
+      if (this.pointList[i / 3].x < -1000) {
+        positions[i] = this.pointList[i / 3].x
+        positions[i + 1] = this.pointList[i / 3].y
+        positions[i + 2] = this.pointList[i / 3].z
         continue
       }
 
@@ -855,22 +887,21 @@ function BulletParticleComponent (entity) {
         positions[i + 1] += this.directions[i / 3].y * 4 * delta
         positions[i + 2] += this.directions[i / 3].z * 4 * delta
 
-        pointList[i / 3].x = positions[i]
-        pointList[i / 3].y = positions[i + 1]
-        pointList[i / 3].z = positions[i + 2]
+        this.pointList[i / 3].x = positions[i]
+        this.pointList[i / 3].y = positions[i + 1]
+        this.pointList[i / 3].z = positions[i + 2]
       }
     }
 
     if (this.lifetime > this.maxLifetime) {
-      this.lifetime = 0
-      // Reset points
-      angelCountUpTime = 0.1
-      // TODO: Destroy here
-      for (let i = 0; i < positions.length; i += 3) {
+      // this.lifetime = 0
+      this.entity.destroy()
+      return
+      /* for (let i = 0; i < positions.length; i += 3) {
         positions[i] = 0
         positions[i + 1] = 0
         positions[i + 2] = 0
-      }
+      } */
     }
 
     this.particles.geometry.attributes.position.needsUpdate = true
@@ -921,6 +952,11 @@ function BulletParticleComponent (entity) {
     /* entity.transform.rotation.x += this.speed * delta
     entity.transform.rotation.y += this.speed / 2 * delta
     entity.transform.rotation.z += this.speed * 1 * delta */
+  }
+
+  this.destroy = () => {
+    this.particles.geometry.dispose()
+    delete pointLists[this.entity.id]
   }
 }
 
@@ -1101,21 +1137,22 @@ function FallGameComponent (entity) {
     this.directionVector = game.view.camera.position.clone().add(this.directionVector)
 
     if (this.velocity < 0.0 && this.distanceFromCenter > 1) {
-      for (let i = 0; i < pointList.length; i++) {
-        // this.axis.position.copy(this.directionVector)
-        if (IntersectSphere(this.directionVector, pointList[i], 0.7)) {
-          this.velocity = this.bounceVelocity * 0.8
-          pointList[i].x = -2000
-          pointList[i].y = -2000
-          pointList[i].z = -2000
-		  shieldPercentPrevious = clamp(this.killTimer, 0.0, this.timeToKill) / this.timeToKill
-		  this.killTimer = clamp(this.killTimer - 1.0, 0.0, this.timeToKill)
-          if (lives <= 0) {
-            this.newStage()
-          } else {
-            lives -= 1
+      for (const property in pointLists) {
+        for (let i = 0; i < pointLists[property].length; i++) {
+          if (IntersectSphere(this.directionVector, pointLists[property][i], 0.7)) {
+            this.velocity = this.bounceVelocity * 0.8
+            pointLists[property][i].x = -2000
+            pointLists[property][i].y = -2000
+            pointLists[property][i].z = -2000
+            shieldPercentPrevious = clamp(this.killTimer, 0.0, this.timeToKill) / this.timeToKill
+            this.killTimer = clamp(this.killTimer - 1.0, 0.0, this.timeToKill)
+            if (lives <= 0) {
+              this.newStage()
+            } else {
+              lives -= 1
+            }
+            break
           }
-          break
         }
       }
     }
