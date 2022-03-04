@@ -220,6 +220,8 @@ function Input () {
           continue
         }
 
+        // document.getElementById('music').play()
+
         pollDown += this.keyboardStates[key].down ? 1 : 0
         pollHeld += this.keyboardStates[key].held ? 1 : 0
         pollUp += this.keyboardStates[key].up ? 1 : 0

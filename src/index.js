@@ -29,6 +29,8 @@ window.joypad.on('connect', e => {
 
 function View () {
   this.camera = new THREE.PerspectiveCamera(70, 4 / 3, 0.01, 64)
+  this.listener = new THREE.AudioListener()
+  this.camera.add(this.listener)
 
   this.install = () => {
     this.camera.position.z = 4
@@ -281,6 +283,8 @@ function Board () {
   this.gradientGeometry = null
   this.particleMaterial = null
 
+  this.musicSound = null
+
   this.install = () => {}
 
   this.ensureResources = (callback) => {
@@ -327,12 +331,11 @@ function Board () {
     this.addAngel()
     this.addGirl()
 
-    const bulletParticleEntity = new Entity(game.scene)
     this.particleMaterial = new THREE.RawShaderMaterial({
       uniforms: {
         color: { value: new THREE.Vector3(1.0, 1.0, 1.0) }//, //, // 0.0, 1.0, 0.8
-      // bayer: { map: game.board.bayerTexture }
-      // scale: { value: this.particleGlobalScale }
+        // bayer: { map: game.board.bayerTexture }
+        // scale: { value: this.particleGlobalScale }
       },
       vertexShader: SHADER.BulletParticleVert,
       fragmentShader: SHADER.BulletParticleFrag,
@@ -341,8 +344,10 @@ function Board () {
       // blending: THREE.AdditiveBlending,
       transparent: true
     })
-    bulletParticleEntity.addComponent(BulletParticleComponent, this.particleMaterial)
-    this.objects.push(bulletParticleEntity)
+    const particleMaterialEntity = new Entity(game.scene)
+    particleMaterialEntity.addComponent(MeshComponent, new THREE.Mesh(new THREE.PlaneGeometry(1, 1, 1, 1), this.particleMaterial))
+    particleMaterialEntity.transform.position.set(30, 30, 30)
+    game.board.objects.push(particleMaterialEntity)
 
     const gradientEntity = new Entity(game.scene)
     const gradientMaterial = new THREE.RawShaderMaterial({
@@ -364,6 +369,9 @@ function Board () {
     gradientEntity.addComponent(EnableOnChargeComponent, gradientMaterial)
     gradientEntity.transform.parent = game.view.camera
     this.objects.push(gradientEntity)
+
+    this.musicSound = new THREE.Audio(game.view.listener)
+    this.musicSound.setMediaElementSource(document.getElementById('music')) // TODO: MOVE THIS SOMEWHERE? Don't use input.js for it
 
     // this.addSphere(0, 1, 0, 2)
   }
@@ -580,6 +588,12 @@ function Board () {
     game.board.objects.push(entity)
   }
 
+  this.addParticle = () => {
+    const bulletParticleEntity = new Entity(game.scene)
+    bulletParticleEntity.addComponent(BulletParticleComponent, this.particleMaterial)
+    this.objects.push(bulletParticleEntity)
+  }
+
   /* this.addCube = (x = 0, y = 0, z = 0) => {
     const geometry = new THREE.BoxGeometry(1, 1, 1)
     const colorArray = new Float32Array(3 * (4 * 6))
@@ -704,18 +718,30 @@ function MoveComponent (entity, speed = 1) {
 }
 
 const easeInOutQuint = (x) => x < 0.5 ? 16 * x * x * x * x * x : 1 - Math.pow(-2 * x + 2, 5) / 2
+const pingPong = (t, l) => l - Math.abs(repeat(t, l * 2) - l)
+const repeat = (t, l) => clamp(t - Math.floor(t / l) * l, 0.0, l)
 
 function EnableOnChargeComponent (entity, material) {
   this.entity = entity
+  this.fullPosition = new THREE.Vector3().copy(this.entity.transform.position)
+  this.emptyVector = new THREE.Vector3(0, 0, 8)
 
   this.update = (delta) => {
     if (shieldPercent >= 1) {
-      entity.transform.visible = true
-	  material.uniforms.tintColor.value.x = lerp(1, 0.28, easeInOutQuint((Math.sin(game.elapsedTime * 5) + 1) / 2))
-	  material.uniforms.tintColor.value.y = lerp(1, 0.28, easeInOutQuint((Math.sin(game.elapsedTime * 5) + 1) / 2))
-	  material.uniforms.tintColor.value.z = lerp(1, 0.28, easeInOutQuint((Math.sin(game.elapsedTime * 5) + 1) / 2))
+      // entity.transform.visible = true
+      // this.entity.transform.position.lerpVectors(this.emptyVector, this.fullPosition, easeOutQuint(clamp(overheatTime, 0, 1)))
+      this.entity.transform.position.copy(this.fullPosition)
+      // material.uniforms.tintColor.value.x = lerp(1, 0.28, easeInOutQuint((Math.sin(game.elapsedTime * 5) + 1) / 2))
+      // material.uniforms.tintColor.value.y = lerp(1, 0.28, easeInOutQuint((Math.sin(game.elapsedTime * 5) + 1) / 2))
+      // material.uniforms.tintColor.value.z = lerp(1, 0.28, easeInOutQuint((Math.sin(game.elapsedTime * 5) + 1) / 2))
+      const percent = Math.floor((overheatTime / 8) * 8.0) / 8.0
+      const percentAlpha = easeInOutQuint(overheatTime % 1.0) // easeInOutQuint(overheatTime % 1.0)
+      material.uniforms.tintColor.value.x = lerp(1, 0.28, percentAlpha)
+      material.uniforms.tintColor.value.y = lerp(lerp(1, 0.28, percentAlpha), 0, percent)
+      material.uniforms.tintColor.value.z = lerp(lerp(1, 0.28, percentAlpha), 0, percent)
     } else {
-      entity.transform.visible = false
+      this.entity.transform.position.copy(this.emptyVector)
+      // entity.transform.visible = false
     }
   }
 }
@@ -858,7 +884,7 @@ function BulletParticleComponent (entity, particleMaterial) {
     const y = row - ((rootOfCount + 1) / 2)
     const z = 2.8
 
-    this.directions.push(new THREE.Vector3(x, y, z).divideScalar(Math.sqrt(x * x + y * y + z * z)).normalize())
+    this.directions.push(new THREE.Vector3(x, y, z).divideScalar(Math.sqrt(x * x + y * y + z * z)).applyQuaternion(globalRotation).normalize())
 
     this.pointList.push(new THREE.Vector3())
   }
@@ -958,6 +984,10 @@ function BulletParticleComponent (entity, particleMaterial) {
     this.particles.geometry.dispose()
     delete pointLists[this.entity.id]
   }
+
+  this.newRound = () => {
+    this.entity.destroy()
+  }
 }
 
 const clamp = (num, min, max) => Math.min(Math.max(num, min), max)
@@ -1022,6 +1052,8 @@ function FallGameComponent (entity) {
   this.stageScale = 0.0
   this.finishedScaling = false
   this.maxHeatTime = 8
+  this.particleTimer = 0
+  this.particleSpawnTime = 3
   // this.lives = 2
   // this.cameraForward = new THREE.Vector3()
   // this.axis = new THREE.AxesHelper(3)
@@ -1050,6 +1082,8 @@ function FallGameComponent (entity) {
     } else {
       overheatTime = 0
     }
+
+    this.particleTimer += delta
 
     this.velocity = clamp(this.velocity, this.terminalVelocityDown, this.terminalVelocityUp)
     this.distanceFromCenter += this.velocity * delta + 0.5 * this.acceleration * delta * delta
@@ -1117,16 +1151,22 @@ function FallGameComponent (entity) {
             shieldPercentPrevious = clamp(this.killTimer, 0.0, this.timeToKill) / this.timeToKill
             // this.killTimer = clamp(this.killTimer - 1.0, 0.0, this.timeToKill)
             this.killTimer = clamp(this.killTimer - 2.5, 0.0, this.timeToKill)
-            this.velocity = this.bounceVelocity * 0.87
+            this.velocity = this.bounceVelocity// * 0.87
           } else if (triangleList[i].type === TriangleType.GOOD) {
             this.killTimer = clamp(this.killTimer + 0.5, 0.0, this.timeToKill)
-            this.velocity = this.bounceVelocity * 1.3
+            this.velocity = this.bounceVelocity// * 1.3
           }
 
           triangleList[i].mesh.geometry.dispose()
           game.scene.remove(triangleList[i].mesh)
           game.renderer.renderLists.dispose()
           triangleList[i].enabled = false
+
+		  if (this.particleTimer >= this.particleSpawnTime) {
+			  this.particleTimer = 0
+			  this.particleSpawnTime = lerp(3, 6, Math.random())
+			  game.board.addParticle()
+		  }
           break
         }
       }
@@ -1225,6 +1265,8 @@ timer -= 1f;
     }
     this.stageScale = 0.0
     lives = 2
+    this.particleTimer = 0
+    this.particleSpawnTime = lerp(3, 6, Math.random())
   }
 }
 
