@@ -15,6 +15,7 @@
     "@pixi/core": "^6.1.2",
     "@pixi/display": "^6.1.2",
     "@pixi/graphics": "^6.1.2",
+    "@pixi/interaction": "^6.2.2",
     "@pixi/loaders": "^6.1.2",
     "@pixi/math": "^6.1.2",
     "@pixi/runner": "^6.1.2",

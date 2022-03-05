@@ -42,6 +42,7 @@ function View () {
 const roundMod = (num, multiple) => Math.round(num / multiple) * multiple
 const lerp = (v0, v1, t) => v0 * (1 - t) + v1 * t
 const easeOutQuint = (x) => 1 - Math.pow(1 - x, 5)
+let gameBegun = false
 
 function UI () {
   this.renderer = null
@@ -60,6 +61,11 @@ function UI () {
   // this.live2Background = null
   this.overheatText = null
   this.overheatTextShadow = null
+  this.startStage = null
+  this.live1Solid = null
+  this.live2Solid = null
+  this.scoreText = null
+  this.scoreTextShadow = null
 
   // const charCounter = 0
   // const charIndex = 0
@@ -73,6 +79,7 @@ function UI () {
     this.stage = new PIXI.Container()
     document.body.appendChild(this.renderer.view)
     this.loader = PIXI.Loader.shared
+    this.startStage = new PIXI.Container()
   }
 
   this.start = () => {
@@ -136,6 +143,14 @@ function UI () {
     this.live1.position.y = 123
     this.stage.addChild(this.live1)
 
+    this.live1Solid = new PIXI.Sprite(this.loader.resources.life_solid.texture)
+    this.live1Solid.position.x = 284 - 1 + 4
+    this.live1Solid.position.y = 123 + 4
+    this.live1Solid.anchor.set(0.5)
+    this.live1Solid.tint = 0xff0000
+    this.live1Solid.filters = [simpleShader]
+    this.stage.addChild(this.live1Solid)
+
     const live2Background = new PIXI.Sprite(this.loader.resources.life_unlit.texture)
     live2Background.position.x = 296 - 1
     live2Background.position.y = 123
@@ -148,11 +163,39 @@ function UI () {
     this.live2.position.y = 123
     this.stage.addChild(this.live2)
 
+    this.live2Solid = new PIXI.Sprite(this.loader.resources.life_solid.texture)
+    this.live2Solid.position.x = 296 - 1 + 4
+    this.live2Solid.position.y = 123 + 4
+    this.live2Solid.anchor.set(0.5)
+    this.live2Solid.tint = 0xff0000
+    this.live2Solid.filters = [simpleShader]
+    this.stage.addChild(this.live2Solid)
+
     this.overheatTextShadow = this.addTextGemma(320 / 2 + 1, 6 + 1, '16.23', 0x000000, 0.5, 0.5)
     this.overheatText = this.addTextGemma(320 / 2, 6, '16.23', 0xffffff, 0.5, 0.5)
+
+    const startButton = new PIXI.Sprite(this.loader.resources.start.texture)
+    startButton.position.x = 320 / 2
+    startButton.position.y = 240 / 2
+    startButton.anchor.set(0.5)
+    startButton.interactive = true
+    startButton.buttonMode = true
+    startButton.on('pointerdown', (event) => {
+      gameBegun = true
+      document.getElementById('music').play()
+    })
+    this.startStage.addChild(startButton)
+
+    this.scoreTextShadow = this.addTextGemma(3 + 1, 3 + 1, 'Score: 0', 0x000000, 0.0, 0.0)
+    this.scoreText = this.addTextGemma(3, 3, 'Score: 0', 0xffffff, 0.0, 0.0)
   }
 
   this.render = () => {
+    if (gameBegun !== true) {
+      this.renderer.render(this.startStage)
+      return
+    }
+
     this.progressBarLossMask.clear()
     this.progressBarLossMask.beginFill()
     this.progressBarLossMask.drawRect(279, 133 + (107 * Math.abs(shieldPercentPrevious - 1)), 29, 107)
@@ -178,13 +221,25 @@ function UI () {
 
     if (lives === 2) {
       this.live1.visible = true
+	  this.live1Solid.visible = false
+
       this.live2.visible = true
+	  this.live2Solid.visible = false
     } else if (lives === 1) {
       this.live1.visible = false
+	  this.live1Solid.visible = true
+	  this.live1Solid.scale.set(lerp(1, 4, clamp(Math.abs(hurtTimerGlobal - 1) * 3, 0, 1)))
+	  this.live1Solid.alpha = lerp(1, 0, clamp(Math.abs(hurtTimerGlobal - 1) * 3, 0, 1))
+
       this.live2.visible = true
     } else {
       this.live1.visible = false
+	  this.live1Solid.alpha = 0
+
       this.live2.visible = false
+	  this.live2Solid.visible = true
+	  this.live2Solid.scale.set(lerp(1, 4, clamp(Math.abs(hurtTimerGlobal - 1) * 3, 0, 1)))
+	  this.live2Solid.alpha = lerp(1, 0, clamp(Math.abs(hurtTimerGlobal - 1) * 3, 0, 1))
     }
 
     if (overheatTime > 0) {
@@ -197,6 +252,9 @@ function UI () {
       this.overheatTextShadow.visible = false
       this.overheatText.visible = false
     }
+
+    this.scoreTextShadow.text = `Score: ${score}`
+    this.scoreText.text = `Score: ${score}`
 
     this.renderer.render(this.stage)
   }
@@ -244,6 +302,8 @@ function UI () {
       .add('girl_head_icon', 'assets/magical_girl_head_tracker.png')
       .add('life_lit', 'assets/life_lit.png')
       .add('life_unlit', 'assets/life_unlit.png')
+      .add('life_solid', 'assets/life_solid.png')
+      .add('start', 'assets/play.png')
       .load(() => {
         callback()
       })
@@ -277,13 +337,16 @@ function Board () {
   this.panelTexture = null
   this.angelGeometry1 = null
   this.magicGirlTexture = null
+  this.magicGirlHurtTexture = null
   this.angelWingGeometry3 = null
   this.panelMaterial = null
   this.angelColor = new THREE.Vector3(1, 1, 1)
   this.gradientGeometry = null
   this.particleMaterial = null
+  this.girlMaterial = null
 
   this.musicSound = null
+  this.soundBank = {}
 
   this.install = () => {}
 
@@ -302,7 +365,58 @@ function Board () {
             this.angelWingGeometry3 = object2
             new THREE.PLYLoader().load('assets/12_inner_gradient.ply', (object3) => { // _inner
               this.gradientGeometry = object3
-              callback()
+              new THREE.AudioLoader().load('assets/angel_hit1.mp3', (buffer) => {
+                this.soundBank.angel_hit = new THREE.Audio(game.view.listener)
+                this.soundBank.angel_hit.setBuffer(buffer)
+                new THREE.AudioLoader().load('assets/hurt1.mp3', (buffer2) => {
+                  this.soundBank.hurt = {
+                    sounds: [],
+                    play: () => {
+                      this.soundBank.hurt.sounds[Math.floor(Math.random() * this.soundBank.hurt.sounds.length)].play()
+                    }
+                  }
+                  const hurtOne = new THREE.Audio(game.view.listener)
+                  hurtOne.setBuffer(buffer2)
+                  this.soundBank.hurt.sounds.push(hurtOne)
+                  new THREE.AudioLoader().load('assets/hurt2.mp3', (buffer3) => {
+                    const hurtTwo = new THREE.Audio(game.view.listener)
+                    hurtTwo.setBuffer(buffer3)
+                    this.soundBank.hurt.sounds.push(hurtTwo)
+                    new THREE.AudioLoader().load('assets/hurt3.mp3', (buffer4) => {
+                      const hurtThree = new THREE.Audio(game.view.listener)
+                      hurtThree.setBuffer(buffer4)
+                      this.soundBank.hurt.sounds.push(hurtThree)
+                      new THREE.AudioLoader().load('assets/break_panel1.mp3', (buffer5) => {
+                        this.soundBank.break = {
+                          sounds: [],
+                          play: () => {
+                            this.soundBank.break.sounds[Math.floor(Math.random() * this.soundBank.break.sounds.length)].play()
+                          }
+                        }
+                        const breakOne = new THREE.Audio(game.view.listener)
+                        breakOne.setBuffer(buffer5)
+                        this.soundBank.break.sounds.push(breakOne)
+                        new THREE.AudioLoader().load('assets/break_panel2.mp3', (buffer6) => {
+                          const breakTwo = new THREE.Audio(game.view.listener)
+                          breakTwo.setBuffer(buffer6)
+                          this.soundBank.break.sounds.push(breakTwo)
+                          new THREE.AudioLoader().load('assets/break_panel3.mp3', (buffer7) => {
+                            const breakThree = new THREE.Audio(game.view.listener)
+                            breakThree.setBuffer(buffer7)
+                            this.soundBank.break.sounds.push(breakThree)
+                            new THREE.TextureLoader().load('assets/magical_girl_1_hurt.png', (texture3) => {
+                              texture3.magFilter = THREE.NearestFilter
+                              texture3.minFilter = THREE.NearestFilter
+                              this.magicGirlHurtTexture = texture3
+                              callback()
+                            })
+                          })
+                        })
+                      })
+                    })
+                  })
+                })
+              })
             })
             /* new THREE.TextureLoader().load('assets/bayer_16_tile_2.png', (texture3) => {
               texture3.magFilter = THREE.NearestFilter
@@ -371,6 +485,7 @@ function Board () {
     this.objects.push(gradientEntity)
 
     this.musicSound = new THREE.Audio(game.view.listener)
+    // this.musicSound.setVolume(0.7)
     this.musicSound.setMediaElementSource(document.getElementById('music')) // TODO: MOVE THIS SOMEWHERE? Don't use input.js for it
 
     // this.addSphere(0, 1, 0, 2)
@@ -570,7 +685,7 @@ function Board () {
 
   this.addGirl = () => {
     const entity = new Entity(game.scene)
-    const girlMaterial = new THREE.RawShaderMaterial({
+    this.girlMaterial = new THREE.RawShaderMaterial({
       uniforms: {
         map: { value: this.magicGirlTexture },
         tintColor: { value: new THREE.Vector3(1.0, 1.0, 1.0) }
@@ -582,7 +697,7 @@ function Board () {
       transparent: true
     })
     const girlGeometry = new THREE.PlaneGeometry(1, 1, 1, 1)
-    const girlMesh = new THREE.Mesh(girlGeometry, girlMaterial)
+    const girlMesh = new THREE.Mesh(girlGeometry, this.girlMaterial)
     entity.addComponent(MeshComponent, girlMesh)
     entity.addComponent(MagicGirlComponent)
     game.board.objects.push(entity)
@@ -828,6 +943,18 @@ function LookAtCameraComponent (entity, speed = 100) {
     // this.easedRotation.rotateTowards(globalRotation, speed * (Math.PI * 180) * delta)
 
     this.entity.transform.quaternion.rotateTowards(globalRotation, (speed * (Math.PI / 180)) * delta)
+    // TODO: Angel wing flap
+    // LERP(game.elapsedTime sin etc.)
+    // TODO:
+    // Score coutner on triangle pies kill destroy
+    // UI clear and death
+    // Dying uh, state, fall in, done done
+    // Bool
+    // >x ~~~Global blood fade, maybe not needed?~~~ xxxx
+    // Low pass music
+    // Squish sound
+    // Blinking bar
+    //
     // this.entity.transform.lookAt(this.target)
 
     // this.lastPosition.copy(game.view.camera.position)
@@ -1029,6 +1156,8 @@ const easeOutBackNoClamp = (t, s = 1) => 1 + (2.70158 * s) * Math.pow(t - 1, 3) 
 const globalRotation = new THREE.Quaternion()
 let globalVelocity = 0
 let percentFromMiddle = 0
+let hurtTimerGlobal = 0
+let score = 0
 
 function FallGameComponent (entity) {
   this.entity = entity
@@ -1054,6 +1183,7 @@ function FallGameComponent (entity) {
   this.maxHeatTime = 8
   this.particleTimer = 0
   this.particleSpawnTime = 3
+  this.hurtTimer = 0
   // this.lives = 2
   // this.cameraForward = new THREE.Vector3()
   // this.axis = new THREE.AxesHelper(3)
@@ -1078,12 +1208,27 @@ function FallGameComponent (entity) {
         } else {
           lives -= 1
         }
+        game.board.soundBank.hurt.play()
+        game.board.girlMaterial.uniforms.map.value = game.board.magicGirlHurtTexture
+        this.hurtTimer = 1
       }
     } else {
       overheatTime = 0
     }
 
     this.particleTimer += delta
+
+    if (this.hurtTimer > 0) {
+      this.hurtTimer -= delta
+	  hurtTimerGlobal = this.hurtTimer
+	   game.board.girlMaterial.uniforms.tintColor.value.y = easeOutBack(lerp(1.0, 0.0, repeat(this.hurtTimer * 2, 1)))
+	   game.board.girlMaterial.uniforms.tintColor.value.z = easeOutBack(lerp(1.0, 0.0, repeat(this.hurtTimer * 2, 1)))
+      if (this.hurtTimer <= 0) {
+        game.board.girlMaterial.uniforms.map.value = game.board.magicGirlTexture
+        game.board.girlMaterial.uniforms.tintColor.value.y = 1
+	   game.board.girlMaterial.uniforms.tintColor.value.z = 1
+      }
+    }
 
     this.velocity = clamp(this.velocity, this.terminalVelocityDown, this.terminalVelocityUp)
     this.distanceFromCenter += this.velocity * delta + 0.5 * this.acceleration * delta * delta
@@ -1152,21 +1297,26 @@ function FallGameComponent (entity) {
             // this.killTimer = clamp(this.killTimer - 1.0, 0.0, this.timeToKill)
             this.killTimer = clamp(this.killTimer - 2.5, 0.0, this.timeToKill)
             this.velocity = this.bounceVelocity// * 0.87
+            score += 5
           } else if (triangleList[i].type === TriangleType.GOOD) {
             this.killTimer = clamp(this.killTimer + 0.5, 0.0, this.timeToKill)
             this.velocity = this.bounceVelocity// * 1.3
-          }
+            score += 25
+          } else {
+			  score += 10
+		  }
 
           triangleList[i].mesh.geometry.dispose()
           game.scene.remove(triangleList[i].mesh)
           game.renderer.renderLists.dispose()
           triangleList[i].enabled = false
+          game.board.soundBank.break.play()
 
-		  if (this.particleTimer >= this.particleSpawnTime) {
-			  this.particleTimer = 0
-			  this.particleSpawnTime = lerp(3, 6, Math.random())
-			  game.board.addParticle()
-		  }
+          if (this.particleTimer >= this.particleSpawnTime) {
+            this.particleTimer = 0
+            this.particleSpawnTime = lerp(3, 6, Math.random())
+            game.board.addParticle()
+          }
           break
         }
       }
@@ -1191,6 +1341,9 @@ function FallGameComponent (entity) {
             } else {
               lives -= 1
             }
+            game.board.soundBank.hurt.play()
+            game.board.girlMaterial.uniforms.map.value = game.board.magicGirlHurtTexture
+            this.hurtTimer = 1
             break
           }
         }
@@ -1230,14 +1383,20 @@ timer -= 1f;
     if (this.distanceFromCenter <= 0.0) {
       if (this.killTimer >= this.timeToKill) {
         console.log('Congratulations, you killed the ogre!') // Next stage here
+        game.board.soundBank.angel_hit.play()
+        score += 100
         this.newStage()
       } else if (lives > 0) {
         this.velocity = this.bounceVelocity
+        game.board.soundBank.hurt.play()
         lives -= 1
         shieldPercentPrevious = clamp(this.killTimer, 0.0, this.timeToKill) / this.timeToKill
         this.killTimer = clamp(this.killTimer - 2.5, 0.0, this.timeToKill)
+        game.board.girlMaterial.uniforms.map.value = game.board.magicGirlHurtTexture
+        this.hurtTimer = 1
       } else {
-        console.error('Oh no, you died! Try again!')
+        console.error('Oh no, you died! Try again!') // TODO: Only reset lives here, maybe 1UP in world, or on certain scores
+        game.board.soundBank.hurt.play()
         this.newStage()
       }
       // TODO: If you are above the top stage, else die and back to menu/retry screen
@@ -1289,6 +1448,7 @@ function Game () {
     this.renderer.setPixelRatio(1)
     this.renderer.setSize(320, 240, false)
     this.renderer.setClearColor(new THREE.Color('black'))
+    this.renderer.domElement.style['pointer-events'] = 'none'
     document.body.appendChild(this.renderer.domElement)
     this.ui.install()
     this.view.install()
@@ -1315,6 +1475,11 @@ function Game () {
   }
 
   this.update = () => {
+    if (gameBegun === false) {
+      this.ui.render()
+      return
+    }
+
     this.state = State.UPDATE
     const delta = this.clock.getDelta()
     this.elapsedTime += delta

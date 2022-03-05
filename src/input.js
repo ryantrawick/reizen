@@ -28,30 +28,30 @@ function Input () {
       return false
     })
     // Is phone
-    if (this.isMobile()) {
-      const selectButton = document.createElement('div')
-      selectButton.style.position = 'fixed'
-      selectButton.style.width = '20vh'
-      selectButton.style.height = '20vh'
-      selectButton.style.top = '70vh'
-      selectButton.style.left = '65vw'
-      selectButton.style.background = 'white'
-      document.body.appendChild(selectButton)
+    // if (this.isMobile()) {
+    //   const selectButton = document.createElement('div')
+    //   selectButton.style.position = 'fixed'
+    //   selectButton.style.width = '20vh'
+    //   selectButton.style.height = '20vh'
+    //   selectButton.style.top = '70vh'
+    //   selectButton.style.left = '65vw'
+    //   selectButton.style.background = 'white'
+    //   document.body.appendChild(selectButton)
 
-      const cancelButton = document.createElement('div')
-      cancelButton.style.position = 'fixed'
-      cancelButton.style.width = '20vh'
-      cancelButton.style.height = '20vh'
-      cancelButton.style.top = '60vh'
-      cancelButton.style.left = '80vw'
-      cancelButton.style.background = 'white'
-      cancelButton.addEventListener('touchstart', () => {
-        this.states.cancel.down += 1
-        this.states.cancel.held += 1
-        console.log(this.states.cancel.down)
-      })
-      document.body.appendChild(cancelButton)
-    }
+    //   const cancelButton = document.createElement('div')
+    //   cancelButton.style.position = 'fixed'
+    //   cancelButton.style.width = '20vh'
+    //   cancelButton.style.height = '20vh'
+    //   cancelButton.style.top = '60vh'
+    //   cancelButton.style.left = '80vw'
+    //   cancelButton.style.background = 'white'
+    //   cancelButton.addEventListener('touchstart', () => {
+    //     this.states.cancel.down += 1
+    //     this.states.cancel.held += 1
+    //     // console.log(this.states.cancel.down)
+    //   })
+    //   document.body.appendChild(cancelButton)
+    // }
   }
 
   this.isMobile = () => {
