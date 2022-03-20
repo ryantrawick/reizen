@@ -6,7 +6,8 @@
   "scripts": {
     "dev:pack": "webpack",
     "dev:serve": "http-server public/",
-    "start": "npm-run-all --parallel dev:*"
+    "start": "npm-run-all --parallel dev:*",
+	"make-build": "webpack"
   },
   "author": "",
   "license": "MIT",

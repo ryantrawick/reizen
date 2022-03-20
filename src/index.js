@@ -66,6 +66,13 @@ function UI () {
   this.live2Solid = null
   this.scoreText = null
   this.scoreTextShadow = null
+  this.retryStage = null
+  this.finalScoreText = null
+  this.finalScoreTextShadow = null
+  this.overheatSprite = null
+  this.enterSprite = null
+  this.xMark = null
+  this.checkMark = null
 
   // const charCounter = 0
   // const charIndex = 0
@@ -80,6 +87,7 @@ function UI () {
     document.body.appendChild(this.renderer.view)
     this.loader = PIXI.Loader.shared
     this.startStage = new PIXI.Container()
+    this.retryStage = new PIXI.Container()
   }
 
   this.start = () => {
@@ -188,11 +196,57 @@ function UI () {
 
     this.scoreTextShadow = this.addTextGemma(3 + 1, 3 + 1, 'Score: 0', 0x000000, 0.0, 0.0)
     this.scoreText = this.addTextGemma(3, 3, 'Score: 0', 0xffffff, 0.0, 0.0)
+
+    const retrySprite = new PIXI.Sprite(this.loader.resources.retry.texture)
+    retrySprite.position.x = 320 / 2
+    retrySprite.position.y = 240 / 2 + 32
+    retrySprite.anchor.set(0.5)
+    this.live2Solid.filters = [simpleShader]
+    this.retryStage.addChild(retrySprite)
+
+    this.finalScoreTextShadow = this.addTextGemmaRetry(320 / 2 + 1, 240 / 2 + 78 + 1, 'Final Score: 8000', 0x000000, 0.5, 0.5)
+    this.finalScoreText = this.addTextGemmaRetry(320 / 2, 240 / 2 + 78, 'Final Score: 8000', 0xffffff, 0.5, 0.5)
+
+	this.overheatSprite = new PIXI.Sprite(this.loader.resources.overheat.texture)
+	this.overheatSprite.position.x = 320 / 2
+	this.overheatSprite.position.y = 12
+	this.overheatSprite.anchor.x = 0.5
+	this.overheatSprite.filters = [simpleShader]
+	this.overheatSprite.visible = false
+	this.stage.addChild(this.overheatSprite)
+
+	this.enterSprite = new PIXI.Sprite(this.loader.resources.enter.texture)
+	this.enterSprite.position.x = 320 / 2
+	this.enterSprite.position.y = 240 / 2 + 64
+	this.enterSprite.anchor.x = 0.5
+	this.enterSprite.filters = [simpleShader]
+	this.enterSprite.visible = false
+	this.stage.addChild(this.enterSprite)
+
+	this.xMark = new PIXI.Sprite(this.loader.resources.x.texture)
+	this.xMark.position.x = 310
+	this.xMark.position.y = 8
+	this.xMark.filters = [simpleShader]
+	this.stage.addChild(this.xMark)
+
+	this.checkMark = new PIXI.Sprite(this.loader.resources.check.texture)
+	this.checkMark.position.x = 311
+	this.checkMark.position.y = 8
+	this.checkMark.filters = [simpleShader]
+	this.checkMark.visible = false
+	this.stage.addChild(this.checkMark)
   }
 
   this.render = () => {
     if (gameBegun !== true) {
       this.renderer.render(this.startStage)
+      return
+    }
+
+    if (dead) {
+      this.finalScoreTextShadow.text = `Final Score: ${score}`
+      this.finalScoreText.text = `Final Score: ${score}`
+      this.renderer.render(this.retryStage)
       return
     }
 
@@ -221,25 +275,27 @@ function UI () {
 
     if (lives === 2) {
       this.live1.visible = true
-	  this.live1Solid.visible = false
+      this.live1Solid.visible = false
 
       this.live2.visible = true
-	  this.live2Solid.visible = false
+      this.live2Solid.visible = false
     } else if (lives === 1) {
       this.live1.visible = false
-	  this.live1Solid.visible = true
-	  this.live1Solid.scale.set(lerp(1, 4, clamp(Math.abs(hurtTimerGlobal - 1) * 3, 0, 1)))
-	  this.live1Solid.alpha = lerp(1, 0, clamp(Math.abs(hurtTimerGlobal - 1) * 3, 0, 1))
+      this.live1Solid.visible = true
+      this.live1Solid.scale.set(lerp(1, 4, clamp(Math.abs(hurtTimerGlobal - 1) * 3, 0, 1)))
+      this.live1Solid.alpha = lerp(1, 0, clamp(Math.abs(hurtTimerGlobal - 1) * 3, 0, 1))
+      this.live1Solid.tint = rgbToHex(255, lerp(1, 0, clamp(Math.abs(hurtTimerGlobal - 1) * 3, 0, 1)) * 255, lerp(1, 0, clamp(Math.abs(hurtTimerGlobal - 1) * 3, 0, 1)) * 255)
 
       this.live2.visible = true
     } else {
       this.live1.visible = false
-	  this.live1Solid.alpha = 0
+      this.live1Solid.alpha = 0
 
       this.live2.visible = false
-	  this.live2Solid.visible = true
-	  this.live2Solid.scale.set(lerp(1, 4, clamp(Math.abs(hurtTimerGlobal - 1) * 3, 0, 1)))
-	  this.live2Solid.alpha = lerp(1, 0, clamp(Math.abs(hurtTimerGlobal - 1) * 3, 0, 1))
+      this.live2Solid.visible = true
+      this.live2Solid.scale.set(lerp(1, 4, clamp(Math.abs(hurtTimerGlobal - 1) * 3, 0, 1)))
+      this.live2Solid.alpha = lerp(1, 0, clamp(Math.abs(hurtTimerGlobal - 1) * 3, 0, 1))
+      this.live2Solid.tint = rgbToHex(255, lerp(1, 0, clamp(Math.abs(hurtTimerGlobal - 1) * 3, 0, 1)) * 255, lerp(1, 0, clamp(Math.abs(hurtTimerGlobal - 1) * 3, 0, 1)) * 255)
     }
 
     if (overheatTime > 0) {
@@ -248,9 +304,21 @@ function UI () {
       this.overheatTextShadow.text = `${Math.abs(overheatTime - 8).toFixed(2)}`
       this.overheatText.text = `${Math.abs(overheatTime - 8).toFixed(2)}`
       this.overheatText.tint = rgbToHex(255, easeOutQuint(overheatTime % 1.0) * 255, easeOutQuint(overheatTime % 1.0) * 255)
+
+      this.overheatSprite.visible = true
+      this.enterSprite.visible = repeat(overheatTime + 0.5, 1) - 0.5 > 0
+
+	  this.xMark.visible = false
+	  this.checkMark.visible = true
     } else {
       this.overheatTextShadow.visible = false
       this.overheatText.visible = false
+
+	  this.overheatSprite.visible = false
+      this.enterSprite.visible = false
+
+	  this.xMark.visible = true
+	  this.checkMark.visible = false
     }
 
     this.scoreTextShadow.text = `Score: ${score}`
@@ -289,6 +357,21 @@ function UI () {
     return newText
   }
 
+  this.addTextGemmaRetry = (x, y, text, color = 0xffffff, anchorX = 0, anchorY = 0) => {
+    const newText = new PIXI.BitmapText(text, {
+      fontName: 'gemma3',
+      fontSize: 8,
+      align: 'center',
+      tint: color
+    })
+    newText.anchor.set(anchorX, anchorY)
+    newText.position.x = x
+    newText.position.y = y
+    this.activeText.push(newText)
+    this.retryStage.addChild(newText)
+    return newText
+  }
+
   this.ensureResources = (callback) => {
     // PIXI.LoaderResource.setExtensionXhrType('fnt', PIXI.LoaderResource.XHR_RESPONSE_TYPE.TEXT)
     this.loader
@@ -304,6 +387,11 @@ function UI () {
       .add('life_unlit', 'assets/life_unlit.png')
       .add('life_solid', 'assets/life_solid.png')
       .add('start', 'assets/play.png')
+      .add('retry', 'assets/retry_title.png')
+	  .add('overheat', 'assets/overheat_title.png')
+	  .add('enter', 'assets/enter_title.png')
+	  .add('x', 'assets/x_mark.png')
+	  .add('check', 'assets/check_mark.png')
       .load(() => {
         callback()
       })
@@ -408,7 +496,15 @@ function Board () {
                               texture3.magFilter = THREE.NearestFilter
                               texture3.minFilter = THREE.NearestFilter
                               this.magicGirlHurtTexture = texture3
-                              callback()
+								new THREE.AudioLoader().load('assets/bullet_fire.mp3', (buffer8) => {
+									this.soundBank.angel_spew = new THREE.Audio(game.view.listener)
+									this.soundBank.angel_spew.setBuffer(buffer8)
+									new THREE.AudioLoader().load('assets/overheat_alert.mp3', (buffer9) => {
+										this.soundBank.alert = new THREE.Audio(game.view.listener)
+										this.soundBank.alert.setBuffer(buffer9)
+										callback()
+									})
+								})
                             })
                           })
                         })
@@ -435,7 +531,7 @@ function Board () {
     // timerEntity.addComponent(TimerComponent, timeText)
     // this.objects.push(timerEntity)
     // this.addSphere(0, 0, 0, 0.5)
-    game.scene.add(new THREE.AxesHelper(2))
+    //game.scene.add(new THREE.AxesHelper(2))
 
     const fallGameEntity = new Entity(game.scene)
     fallGameEntity.addComponent(FallGameComponent)
@@ -866,17 +962,22 @@ function MagicGirlComponent (entity) {
   // this.targetPosition = new THREE.Vector3()
 
   this.update = (delta) => {
-	 // this.targetPosition.copy(game.view.camera.position)
+    // this.targetPosition.copy(game.view.camera.position)
     this.entity.transform.position.copy(game.view.camera.position)
     this.entity.transform.rotation.copy(game.view.camera.rotation)
     // this.entity.transform.translateZ(lerp(-2.4, -1.3, easeOutBack((globalVelocity + 5) / 24), 6)) // -1.2)
     // this.entity.transform.translateZ(-1.2 * 2)
     this.entity.transform.translateZ(lerp(-2, 0, globalVelocity / 55))// (globalVelocity >= 0 ? lerp(-1.4, -5, globalVelocity / 55) : lerp(-1.4, -3, Math.abs(globalVelocity) / 55)) // lerp(-2, 0, globalVelocity / 55)
-    this.entity.transform.translateX(((game.input.getButton('left') ? -1 : 0) + (game.input.getButton('right') ? 1 : 0)) * 0.1)
-    this.entity.transform.translateY(((game.input.getButton('forward') ? -1 : 0) + (game.input.getButton('back') ? 1 : 0)) * 0.1 * -1)
+
+    if (dead === false) {
+      this.entity.transform.translateX(((game.input.getButton('left') ? -1 : 0) + (game.input.getButton('right') ? 1 : 0)) * 0.1)
+      this.entity.transform.translateY(((game.input.getButton('forward') ? -1 : 0) + (game.input.getButton('back') ? 1 : 0)) * 0.1 * -1)
+    }
+
     // this.entity.transform.lookAt(game.view.camera.position)
     // game.view.camera.fov = lerp(70, 40, globalVelocity / 55)
-    game.view.camera.updateProjectionMatrix()
+
+    // game.view.camera.updateProjectionMatrix()
   }
 }
 
@@ -1158,6 +1259,7 @@ let globalVelocity = 0
 let percentFromMiddle = 0
 let hurtTimerGlobal = 0
 let score = 0
+let dead = false
 
 function FallGameComponent (entity) {
   this.entity = entity
@@ -1184,13 +1286,14 @@ function FallGameComponent (entity) {
   this.particleTimer = 0
   this.particleSpawnTime = 3
   this.hurtTimer = 0
+  this.playedOverheat = false
   // this.lives = 2
   // this.cameraForward = new THREE.Vector3()
   // this.axis = new THREE.AxesHelper(3)
   // game.scene.add(this.axis)
 
   this.update = (delta) => {
-    if (this.killTimer < this.timeToKill) {
+    if (this.killTimer < this.timeToKill && dead === false) {
       this.killTimer += delta
     }
     shieldPercent = clamp(this.killTimer, 0.0, this.timeToKill) / this.timeToKill
@@ -1198,35 +1301,45 @@ function FallGameComponent (entity) {
     if (this.killTimer >= this.timeToKill) {
       overheatTime += delta
 
+if (this.playedOverheat === false) {
+	if (game.board.soundBank.alert !== null && game.board.soundBank.alert.isPlaying) {
+				game.board.soundBank.alert.stop()
+			}
+			game.board.soundBank.alert.play()
+}
+
+	  this.playedOverheat = true
+
       if (overheatTime > this.maxHeatTime) { // TODO: Explode here
         shieldPercentPrevious = clamp(this.killTimer, 0.0, this.timeToKill) / this.timeToKill
         this.killTimer = clamp(this.killTimer - 3.0, 0.0, this.timeToKill)
         this.velocity = this.bounceVelocity * 1.1
         overheatTime = 0
         if (lives <= 0) {
-          this.newStage()
+          this.die()
         } else {
           lives -= 1
+          game.board.soundBank.hurt.play()
+          game.board.girlMaterial.uniforms.map.value = game.board.magicGirlHurtTexture
+          this.hurtTimer = 1
         }
-        game.board.soundBank.hurt.play()
-        game.board.girlMaterial.uniforms.map.value = game.board.magicGirlHurtTexture
-        this.hurtTimer = 1
       }
     } else {
       overheatTime = 0
+	  this.playedOverheat = false
     }
 
     this.particleTimer += delta
 
-    if (this.hurtTimer > 0) {
+    if (this.hurtTimer >= 0) {
       this.hurtTimer -= delta
-	  hurtTimerGlobal = this.hurtTimer
-	   game.board.girlMaterial.uniforms.tintColor.value.y = easeOutBack(lerp(1.0, 0.0, repeat(this.hurtTimer * 2, 1)))
-	   game.board.girlMaterial.uniforms.tintColor.value.z = easeOutBack(lerp(1.0, 0.0, repeat(this.hurtTimer * 2, 1)))
+      hurtTimerGlobal = this.hurtTimer
+      game.board.girlMaterial.uniforms.tintColor.value.y = easeOutBack(lerp(1.0, 0.0, repeat(this.hurtTimer * 2, 1)))
+      game.board.girlMaterial.uniforms.tintColor.value.z = easeOutBack(lerp(1.0, 0.0, repeat(this.hurtTimer * 2, 1)))
       if (this.hurtTimer <= 0) {
         game.board.girlMaterial.uniforms.map.value = game.board.magicGirlTexture
         game.board.girlMaterial.uniforms.tintColor.value.y = 1
-	   game.board.girlMaterial.uniforms.tintColor.value.z = 1
+        game.board.girlMaterial.uniforms.tintColor.value.z = 1
       }
     }
 
@@ -1241,15 +1354,24 @@ function FallGameComponent (entity) {
 
     this.stageScale += delta * 2
 
-    // TODO: Normalize here
-    this.rotation.multiply(this.newRotation.setFromEuler(
-      this.newRotationEuler.set(
-        ((((game.input.getButton('forward') ? -1.0 : 0.0) + (game.input.getButton('back') ? 1.0 : 0.0)) * this.rotateSpeed) * (Math.PI / 180.0)) * delta,
-        ((((game.input.getButton('left') ? -1.0 : 0.0) + (game.input.getButton('right') ? 1.0 : 0.0)) * this.rotateSpeed) * (Math.PI / 180.0)) * delta,
-        0
-      )))
+    // TODO: Normalize here xxx~~~
+    if (dead === false) {
+      this.rotation.multiply(this.newRotation.setFromEuler(
+        this.newRotationEuler.set(
+          ((((game.input.getButton('forward') ? -1.0 : 0.0) + (game.input.getButton('back') ? 1.0 : 0.0)) * this.rotateSpeed) * (Math.PI / 180.0)) * delta,
+          ((((game.input.getButton('left') ? -1.0 : 0.0) + (game.input.getButton('right') ? 1.0 : 0.0)) * this.rotateSpeed) * (Math.PI / 180.0)) * delta,
+          0
+        )))
+    }
 
     globalRotation.copy(this.rotation)
+
+    if (game.input.getButtonDown('restart') && dead) {
+      dead = false
+      this.newStage()
+      score = 0
+	  lives = 2
+    }
 
     /* const rotObjectMatrix = new THREE.Matrix4()
     rotObjectMatrix.makeRotationFromQuaternion(
@@ -1297,14 +1419,16 @@ function FallGameComponent (entity) {
             // this.killTimer = clamp(this.killTimer - 1.0, 0.0, this.timeToKill)
             this.killTimer = clamp(this.killTimer - 2.5, 0.0, this.timeToKill)
             this.velocity = this.bounceVelocity// * 0.87
-            score += 5
+            this.addScore(5)
           } else if (triangleList[i].type === TriangleType.GOOD) {
-            this.killTimer = clamp(this.killTimer + 0.5, 0.0, this.timeToKill)
+            if (dead === false) {
+              this.killTimer = clamp(this.killTimer + 0.5, 0.0, this.timeToKill)
+            }
             this.velocity = this.bounceVelocity// * 1.3
-            score += 25
+            this.addScore(25)
           } else {
-			  score += 10
-		  }
+            this.addScore(10)
+          }
 
           triangleList[i].mesh.geometry.dispose()
           game.scene.remove(triangleList[i].mesh)
@@ -1316,6 +1440,10 @@ function FallGameComponent (entity) {
             this.particleTimer = 0
             this.particleSpawnTime = lerp(3, 6, Math.random())
             game.board.addParticle()
+			if (game.board.soundBank.angel_spew !== null && game.board.soundBank.angel_spew.isPlaying) {
+				game.board.soundBank.angel_spew.stop()
+			}
+			game.board.soundBank.angel_spew.play()
           }
           break
         }
@@ -1337,13 +1465,16 @@ function FallGameComponent (entity) {
             shieldPercentPrevious = clamp(this.killTimer, 0.0, this.timeToKill) / this.timeToKill
             this.killTimer = clamp(this.killTimer - 1.0, 0.0, this.timeToKill)
             if (lives <= 0) {
-              this.newStage()
+              // this.newStage()
+              this.die()
             } else {
               lives -= 1
             }
-            game.board.soundBank.hurt.play()
-            game.board.girlMaterial.uniforms.map.value = game.board.magicGirlHurtTexture
-            this.hurtTimer = 1
+            if (dead === false) {
+              game.board.soundBank.hurt.play()
+              game.board.girlMaterial.uniforms.map.value = game.board.magicGirlHurtTexture
+              this.hurtTimer = 1
+            }
             break
           }
         }
@@ -1384,20 +1515,21 @@ timer -= 1f;
       if (this.killTimer >= this.timeToKill) {
         console.log('Congratulations, you killed the ogre!') // Next stage here
         game.board.soundBank.angel_hit.play()
-        score += 100
+        this.addScore(100)
         this.newStage()
       } else if (lives > 0) {
         this.velocity = this.bounceVelocity
-        game.board.soundBank.hurt.play()
         lives -= 1
         shieldPercentPrevious = clamp(this.killTimer, 0.0, this.timeToKill) / this.timeToKill
         this.killTimer = clamp(this.killTimer - 2.5, 0.0, this.timeToKill)
+        game.board.soundBank.hurt.play()
         game.board.girlMaterial.uniforms.map.value = game.board.magicGirlHurtTexture
         this.hurtTimer = 1
       } else {
         console.error('Oh no, you died! Try again!') // TODO: Only reset lives here, maybe 1UP in world, or on certain scores
-        game.board.soundBank.hurt.play()
-        this.newStage()
+        this.velocity = this.bounceVelocity
+        this.die()
+        // this.newStage()
       }
       // TODO: If you are above the top stage, else die and back to menu/retry screen
     //   this.velocity = 0.0
@@ -1413,6 +1545,22 @@ timer -= 1f;
     }
   }
 
+  this.die = () => {
+    if (dead === false) {
+      game.board.soundBank.hurt.play()
+      game.board.girlMaterial.uniforms.map.value = game.board.magicGirlHurtTexture
+      this.hurtTimer = this.hurtTimer + 800
+      hurtTimerGlobal = this.hurtTimer
+      dead = true
+    }
+  }
+
+  this.addScore = (scoreAmount) => {
+    if (dead === false) {
+      score += scoreAmount
+    }
+  }
+
   this.newStage = () => {
     this.velocity = 0.0
     this.killTimer = 0.0
@@ -1423,9 +1571,10 @@ timer -= 1f;
       game.board.objects[i].sendMessage('newRound')
     }
     this.stageScale = 0.0
-    lives = 2
+    // lives = 2
     this.particleTimer = 0
     this.particleSpawnTime = lerp(3, 6, Math.random())
+    this.hurtTimer = 0
   }
 }
 

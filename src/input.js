@@ -6,7 +6,8 @@ function Input () {
     left: { type: 'button' },
     right: { type: 'button' },
     select: { type: 'button' },
-    cancel: { type: 'button' }
+    cancel: { type: 'button' },
+    restart: { type: 'button' }
   }
 
   this.install = () => {
@@ -79,7 +80,8 @@ function Input () {
     left: ['a', 'ArrowLeft'],
     right: ['d', 'ArrowRight'],
     select: ['z', 'e', 'Spacebar', ' ', 'Enter'],
-    cancel: ['x', 'q', 'Backspace']
+    cancel: ['x', 'q', 'Backspace'],
+    restart: ['r']
   }
   this.onKeyDown = (event) => {
     if (!this.keyboardStates[event.key]) {
@@ -98,8 +100,9 @@ function Input () {
     back: [13],
     left: [14],
     right: [15],
-    select: [0],
-    cancel: [1]
+    select: [9],
+    cancel: [1],
+    restart: [0]
   }
   this.onButtonDown = (name) => {
     if (!this.gamepadStates[name]) {
